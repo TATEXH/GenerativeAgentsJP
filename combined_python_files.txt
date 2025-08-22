@@ -1,0 +1,4156 @@
+==============================
+File: combine_script.py
+==============================
+
+import os
+
+def combine_python_files_in_folder_recursive(folder_path, output_file_name='combined_python_files.txt'):
+    """
+    指定されたフォルダとそのすべてのサブフォルダ内にあるPythonファイルの内容を
+    一つのテキストファイルに再帰的に結合します。
+
+    Args:
+        folder_path (str): Pythonファイルが含まれるルートフォルダのパス。
+        output_file_name (str, optional): 出力するテキストファイルの名前。
+                                           デフォルトは 'combined_python_files.txt'。
+    """
+    try:
+        # 指定されたフォルダが存在するか確認
+        if not os.path.isdir(folder_path):
+            print(f"エラー: フォルダ '{folder_path}' が見つかりません。")
+            return
+
+        # 出力ファイルを開く
+        with open(output_file_name, 'w', encoding='utf-8') as outfile:
+            # os.walkでフォルダツリーを渡り歩く
+            # root: 現在のフォルダのパス
+            # dirs: 現在のフォルダ内のサブフォルダのリスト
+            # files: 現在のフォルダ内のファイルのリスト
+            for root, dirs, files in os.walk(folder_path):
+                for filename in files:
+                    # ファイルが.pyで終わるかチェック
+                    if filename.endswith('.py'):
+                        file_path = os.path.join(root, filename)
+                        
+                        # 区切りとしてファイルパスを追加
+                        outfile.write(f'{"="*30}\n')
+                        # ルートフォルダからの相対パスを表示すると見やすい
+                        relative_path = os.path.relpath(file_path, folder_path)
+                        outfile.write(f'File: {relative_path}\n')
+                        outfile.write(f'{"="*30}\n\n')
+                        
+                        # Pythonファイルを開いて内容を読み込み、出力ファイルに書き込む
+                        try:
+                            with open(file_path, 'r', encoding='utf-8') as infile:
+                                outfile.write(infile.read())
+                                outfile.write('\n\n')
+                        except Exception as e:
+                            outfile.write(f"--- ファイル '{filename}' の読み込み中にエラーが発生しました: {e} ---\n\n")
+
+        print(f"完了しました！ '{output_file_name}' にファイルが作成されました。")
+
+    except Exception as e:
+        print(f"予期せぬエラーが発生しました: {e}")
+
+
+if __name__ == '__main__':
+    # ここにPythonファイルが入っているフォルダのパスを指定してください
+    target_folder = input("Pythonファイルが含まれるルートフォルダのパスを入力してください: ")
+    combine_python_files_in_folder_recursive(target_folder)
+
+==============================
+File: generative_agents/replay.py
+==============================
+
+import os
+import json
+from datetime import datetime, timedelta
+from flask import Flask, render_template, request
+
+from compress import frames_per_step, file_movement
+from start import personas
+
+app = Flask(
+    __name__,
+    template_folder="frontend/templates",
+    static_folder="frontend/static",
+    static_url_path="/static",
+)
+
+
+@app.route("/", methods=['GET'])
+def index():
+    name = request.args.get("name", "")          # 记录名称
+    step = int(request.args.get("step", 0))      # 回放起始步数
+    speed = int(request.args.get("speed", 2))    # 回放速度（0~5）
+    zoom = float(request.args.get("zoom", 0.8))  # 画面缩放比例
+
+    if len(name) > 0:
+        compressed_folder = f"results/compressed/{name}"
+    else:
+        return f"Invalid name of the simulation: '{name}'"
+
+    replay_file = f"{compressed_folder}/{file_movement}"
+    if not os.path.exists(replay_file):
+        return f"The data file doesn‘t exist: '{replay_file}'<br />Run compress.py to generate the data first."
+
+    with open(replay_file, "r", encoding="utf-8") as f:
+        params = json.load(f)
+
+    if step < 1:
+        step = 1
+    if step > 1:
+        # 重新设置回放的起始时间
+        t = datetime.fromisoformat(params["start_datetime"])
+        dt = t + timedelta(minutes=params["stride"]*(step-1))
+        params["start_datetime"] = dt.isoformat()
+        step = (step-1) * frames_per_step + 1
+        if step >= len(params["all_movement"]):
+            step = len(params["all_movement"])-1
+
+        # 重新设置Agent的初始位置
+        for agent in params["persona_init_pos"].keys():
+            persona_init_pos = params["persona_init_pos"]
+            persona_step_pos = params["all_movement"][f"{step}"]
+            persona_init_pos[agent] = persona_step_pos[agent]["movement"]
+
+    if speed < 0:
+        speed = 0
+    elif speed > 5:
+        speed = 5
+    speed = 2 ** speed
+
+    return render_template(
+        "index.html",
+        persona_names=personas,
+        step=step,
+        play_speed=speed,
+        zoom=zoom,
+        **params
+    )
+
+
+if __name__ == "__main__":
+    app.run(debug=True)
+
+
+==============================
+File: generative_agents/start.py
+==============================
+
+import os
+import copy
+import json
+import argparse
+import datetime
+
+from dotenv import load_dotenv, find_dotenv
+
+from modules.game import create_game, get_game
+from modules import utils
+
+personas = [
+    "阿伊莎", "克劳斯", "玛丽亚", "沃尔夫冈",  # 学生
+    "梅", "约翰", "埃迪",  # 家庭：教授、药店主人、学生
+    "简", "汤姆",  # 家庭：家庭主妇、市场主人
+    "卡门", "塔玛拉",  # 室友：供应店主人、儿童读物作家
+    "亚瑟", "伊莎贝拉",  # 酒吧老板、咖啡馆老板
+    "山姆", "詹妮弗",  # 家庭：退役军官、水彩画家
+    "弗朗西斯科", "海莉", "拉吉夫", "拉托亚",  # 共居空间：喜剧演员、作家、画家、摄影师
+    "阿比盖尔", "卡洛斯", "乔治", "瑞恩", "山本百合子", "亚当",  # 动画师、诗人、数学家、软件工程师、税务律师、哲学家
+]
+
+
+class SimulateServer:
+    def __init__(self, name, static_root, checkpoints_folder, config, start_step=0, verbose="info", log_file=""):
+        self.name = name
+        self.static_root = static_root
+        self.checkpoints_folder = checkpoints_folder
+
+        # 历史存档数据（用于断点恢复）
+        self.config = config
+
+        os.makedirs(checkpoints_folder, exist_ok=True)
+
+        # 载入历史对话数据（用于断点恢复）
+        self.conversation_log = f"{checkpoints_folder}/conversation.json"
+        if os.path.exists(self.conversation_log):
+            with open(self.conversation_log, "r", encoding="utf-8") as f:
+                conversation = json.load(f)
+        else:
+            conversation = {}
+
+        if len(log_file) > 0:
+            self.logger = utils.create_file_logger(f"{checkpoints_folder}/{log_file}", verbose)
+        else:
+            self.logger = utils.create_io_logger(verbose)
+
+        # 创建游戏
+        game = create_game(name, static_root, config, conversation, logger=self.logger)
+        game.reset_game()
+
+        self.game = get_game()
+        self.tile_size = self.game.maze.tile_size
+        self.agent_status = {}
+        if "agent_base" in config:
+            agent_base = config["agent_base"]
+        else:
+            agent_base = {}
+        for agent_name, agent in config["agents"].items():
+            agent_config = copy.deepcopy(agent_base)
+            agent_config.update(self.load_static(agent["config_path"]))
+            self.agent_status[agent_name] = {
+                "coord": agent_config["coord"],
+                "path": [],
+            }
+        self.think_interval = max(
+            a.think_config["interval"] for a in self.game.agents.values()
+        )
+        self.start_step = start_step
+
+    def simulate(self, step, stride=0):
+        timer = utils.get_timer()
+        for i in range(self.start_step, self.start_step + step):
+            title = "Simulate Step[{}/{}, time: {}]".format(i+1, self.start_step + step, timer.get_date())
+            self.logger.info("\n" + utils.split_line(title, "="))
+            for name, status in self.agent_status.items():
+                plan = self.game.agent_think(name, status)["plan"]
+                agent = self.game.get_agent(name)
+                if name not in self.config["agents"]:
+                    self.config["agents"][name] = {}
+                self.config["agents"][name].update(agent.to_dict())
+                if plan.get("path"):
+                    status["coord"], status["path"] = plan["path"][-1], []
+                self.config["agents"][name].update(
+                    # {"coord": status["coord"], "path": plan["path"]}
+                    {"coord": status["coord"]}
+                )
+
+            sim_time = timer.get_date("%Y%m%d-%H:%M")
+            self.config.update(
+                {
+                    "time": sim_time,
+                    "step": i + 1,
+                }
+            )
+            # 保存Agent活动数据
+            with open(f"{self.checkpoints_folder}/simulate-{sim_time.replace(':', '')}.json", "w", encoding="utf-8") as f:
+                f.write(json.dumps(self.config, indent=2, ensure_ascii=False))
+            # 保存对话数据
+            with open(f"{self.checkpoints_folder}/conversation.json", "w", encoding="utf-8") as f:
+                f.write(json.dumps(self.game.conversation, indent=2, ensure_ascii=False))
+
+            if stride > 0:
+                timer.forward(stride)
+
+    def load_static(self, path):
+        return utils.load_dict(os.path.join(self.static_root, path))
+
+
+# 从存档数据中载入配置，用于断点恢复
+def get_config_from_log(checkpoints_folder):
+    files = sorted(os.listdir(checkpoints_folder))
+
+    json_files = list()
+    for file_name in files:
+        if file_name.endswith(".json") and file_name != "conversation.json":
+            json_files.append(os.path.join(checkpoints_folder, file_name))
+
+    if len(json_files) < 1:
+        return None
+
+    with open(json_files[-1], "r", encoding="utf-8") as f:
+        config = json.load(f)
+
+    assets_root = os.path.join("assets", "village")
+
+    start_time = datetime.datetime.strptime(config["time"], "%Y%m%d-%H:%M")
+    start_time += datetime.timedelta(minutes=config["stride"])
+    config["time"] = {"start": start_time.strftime("%Y%m%d-%H:%M")}
+    agents = config["agents"]
+    for a in agents:
+        config["agents"][a]["config_path"] = os.path.join(assets_root, "agents", a.replace(" ", "_"), "agent.json")
+
+    return config
+
+
+# 为新游戏创建配置
+def get_config(start_time="20240213-09:30", stride=15, agents=None):
+    with open("data/config.json", "r", encoding="utf-8") as f:
+        json_data = json.load(f)
+        agent_config = json_data["agent"]
+
+    assets_root = os.path.join("assets", "village")
+    config = {
+        "stride": stride,
+        "time": {"start": start_time},
+        "maze": {"path": os.path.join(assets_root, "maze.json")},
+        "agent_base": agent_config,
+        "agents": {},
+    }
+    for a in agents:
+        config["agents"][a] = {
+            "config_path": os.path.join(
+                assets_root, "agents", a.replace(" ", "_"), "agent.json"
+            ),
+        }
+    return config
+
+
+load_dotenv(find_dotenv())
+
+parser = argparse.ArgumentParser(description="console for village")
+parser.add_argument("--name", type=str, default="", help="The simulation name")
+parser.add_argument("--start", type=str, default="20240213-09:30", help="The starting time of the simulated ville")
+parser.add_argument("--resume", action="store_true", help="Resume running the simulation")
+parser.add_argument("--step", type=int, default=10, help="The simulate step")
+parser.add_argument("--stride", type=int, default=10, help="The step stride in minute")
+parser.add_argument("--verbose", type=str, default="debug", help="The verbose level")
+parser.add_argument("--log", type=str, default="", help="Name of the log file")
+args = parser.parse_args()
+
+
+if __name__ == "__main__":
+    checkpoints_path = "results/checkpoints"
+
+    name = args.name
+    if len(name) < 1:
+        name = input("Please enter a simulation name (e.g. sim-test): ")
+
+    resume = args.resume
+    if resume:
+        while not os.path.exists(f"{checkpoints_path}/{name}"):
+            name = input(f"'{name}' doesn't exists, please re-enter the simulation name: ")
+    else:
+        while os.path.exists(f"{checkpoints_path}/{name}"):
+            name = input(f"The name '{name}' already exists, please enter a new name: ")
+
+    checkpoints_folder = f"{checkpoints_path}/{name}"
+
+    start_time = args.start
+    if resume:
+        sim_config = get_config_from_log(checkpoints_folder)
+        if sim_config is None:
+            print("No checkpoint file found to resume running.")
+            exit(0)
+        start_step = sim_config["step"]
+    else:
+        sim_config = get_config(start_time, args.stride, personas)
+        start_step = 0
+
+    static_root = "frontend/static"
+
+    server = SimulateServer(name, static_root, checkpoints_folder, sim_config, start_step, args.verbose, args.log)
+    server.simulate(args.step, args.stride)
+
+
+==============================
+File: generative_agents/compress.py
+==============================
+
+import os
+import json
+import argparse
+from datetime import datetime
+
+from modules.maze import Maze
+from start import personas
+
+file_markdown = "simulation.md"
+file_movement = "movement.json"
+
+frames_per_step = 60  # 每个step包含的帧数
+
+
+# 从存档文件中读取stride
+def get_stride(json_files):
+    if len(json_files) < 1:
+        return 1
+
+    with open(json_files[-1], "r", encoding="utf-8") as f:
+        config = json.load(f)
+
+    return config["stride"]
+
+
+# 将address转换为字符串
+def get_location(address):
+    # 仅为兼容原版
+    # if address[0] == "<waiting>" or address[0] == "<persona>":
+    #     return None
+
+    # 不需要显示address第一级（"the Ville"）
+    location = "，".join(address[1:])
+
+    return location
+
+
+# 插入第0帧数据（Agent的初始状态）
+def insert_frame0(init_pos, movement, agent_name):
+    key = "0"
+    if key not in movement.keys():
+        movement[key] = dict()
+
+    json_path = f"frontend/static/assets/village/agents/{agent_name}/agent.json"
+    with open(json_path, "r", encoding="utf-8") as f:
+        json_data = json.load(f)
+        address = json_data["spatial"]["address"]["living_area"]
+    location = get_location(address)
+    coord = json_data["coord"]
+    init_pos[agent_name] = coord
+    movement[key][agent_name] = {
+        "location": location,
+        "movement": coord,
+        "description": "正在睡觉",
+    }
+    movement["description"][agent_name] = {
+        "currently": json_data["currently"],
+        "scratch": json_data["scratch"],
+    }
+
+
+# 从所有存档文件中提取数据（用于回放）
+def generate_movement(checkpoints_folder, compressed_folder, compressed_file):
+    movement_file = os.path.join(compressed_folder, compressed_file)
+
+    conversation_file = "conversation.json"
+    conversation = {}
+    if os.path.exists(os.path.join(checkpoints_folder, conversation_file)):
+        with open(os.path.join(checkpoints_folder, conversation_file), "r", encoding="utf-8") as f:
+            conversation = json.load(f)
+
+    files = sorted(os.listdir(checkpoints_folder))
+    json_files = list()
+    for file_name in files:
+        if file_name.endswith(".json") and file_name != conversation_file:
+            json_files.append(os.path.join(checkpoints_folder, file_name))
+
+    persona_init_pos = dict()
+    all_movement = dict()
+    all_movement["description"] = dict()
+    all_movement["conversation"] = dict()
+
+    stride = get_stride(json_files)
+    sec_per_step = stride
+
+    result = {
+        "start_datetime": "",  # 起始时间
+        "stride": stride,  # 每个step对应的分钟数（必须与生成时的参数一致）
+        "sec_per_step": sec_per_step,  # 回放时每一帧对应的秒数
+        "persona_init_pos": persona_init_pos,  # 每个Agent的初始位置
+        "all_movement": all_movement,  # 所有Agent在每个setp中的位置变化
+    }
+
+    last_location = dict()
+
+    # 加载地图数据，用于计算Agent移动路径
+    json_path = "frontend/static/assets/village/maze.json"
+    with open(json_path, "r", encoding="utf-8") as f:
+        json_data = json.load(f)
+        maze = Maze(json_data, None)
+
+    for file_name in json_files:
+        # 依次读取所有存档文件
+        with open(file_name, "r", encoding="utf-8") as f:
+            json_data = json.load(f)
+            step = json_data["step"]
+            agents = json_data["agents"]
+
+            # 保存回放的起始时间
+            if len(result["start_datetime"]) < 1:
+                t = datetime.strptime(json_data["time"], "%Y%m%d-%H:%M")
+                result["start_datetime"] = t.isoformat()
+
+            # 遍历单个存档文件中的所有Agent
+            for agent_name, agent_data in agents.items():
+                # 插入第0帧
+                if step == 1:
+                    insert_frame0(persona_init_pos, all_movement, agent_name)
+
+                source_coord = last_location.get(agent_name, all_movement["0"][agent_name])["movement"]
+                target_coord = agent_data["coord"]
+                location = get_location(agent_data["action"]["event"]["address"])
+                if location is None:
+                    location = last_location.get(agent_name, all_movement["0"][agent_name])["location"]
+                    path = [source_coord]
+                else:
+                    path = maze.find_path(source_coord, target_coord)
+
+                had_conversation = False
+                step_conversation = ""
+                persons_in_conversation = []
+                step_time = json_data["time"]
+                if step_time in conversation.keys():
+                    for chats in conversation[step_time]:
+                        for persons, chat in chats.items():
+                            persons_in_conversation.append(persons.split(" @ ")[0].split(" -> "))
+                            step_conversation += f"\n地点：{persons.split(' @ ')[1]}\n\n"
+                            for c in chat:
+                                agent = c[0]
+                                text = c[1]
+                                step_conversation += f"{agent}：{text}\n"
+
+                for i in range(frames_per_step):
+                    moving = len(path) > 1
+                    if len(path) > 0:
+                        movement = list(path[0])
+                        path = path[1:]
+                        if agent_name not in last_location.keys():
+                            last_location[agent_name] = dict()
+                        last_location[agent_name]["movement"] = movement
+                        last_location[agent_name]["location"] = location
+                    else:
+                        movement = None
+
+                    if moving:
+                        action = f"前往 {location}"
+                    elif movement is not None:
+                        action = agent_data["action"]["event"]["describe"]
+                        if len(action) < 1:
+                            action = f'{agent_data["action"]["event"]["predicate"]}{agent_data["action"]["event"]["object"]}'
+
+                        # 判断该存档文件中当前Agent是否有新的对话（用于设置图标）
+                        for persons in persons_in_conversation:
+                            if agent_name in persons:
+                                had_conversation = True
+                                break
+
+                        # 针对睡觉和对话设置图标
+                        if "睡觉" in action:
+                            action = "😴 " + action
+                        elif had_conversation:
+                            action = "💬 " + action
+
+                    step_key = "%d" % ((step-1) * frames_per_step + 1 + i)
+                    if step_key not in all_movement.keys():
+                        all_movement[step_key] = dict()
+
+                    if movement is not None:
+                        all_movement[step_key][agent_name] = {
+                            "location": location,
+                            "movement": movement,
+                            "action": action,
+                        }
+                all_movement["conversation"][step_time] = step_conversation
+
+    # 保存数据
+    with open(movement_file, "w", encoding="utf-8") as f:
+        f.write(json.dumps(result, indent=2, ensure_ascii=False))
+
+    return result
+
+
+# 生成Markdown文档
+def generate_report(checkpoints_folder, compressed_folder, compressed_file):
+    last_state = dict()
+
+    conversation_file = "conversation.json"
+    conversation = {}
+    if os.path.exists(os.path.join(checkpoints_folder, conversation_file)):
+        with open(os.path.join(checkpoints_folder, conversation_file), "r", encoding="utf-8") as f:
+            conversation = json.load(f)
+
+    def extract_description():
+        markdown_content = "# 基础人设\n\n"
+        for agent_name in personas:
+            json_path = f"frontend/static/assets/village/agents/{agent_name}/agent.json"
+            with open(json_path, "r", encoding="utf-8") as f:
+                json_data = json.load(f)
+                markdown_content += f"## {agent_name}\n\n"
+                markdown_content += f"年龄：{json_data['scratch']['age']}岁  \n"
+                markdown_content += f"先天：{json_data['scratch']['innate']}  \n"
+                markdown_content += f"后天：{json_data['scratch']['learned']}  \n"
+                markdown_content += f"生活习惯：{json_data['scratch']['lifestyle']}  \n"
+                markdown_content += f"当前状态：{json_data['currently']}\n\n"
+        return markdown_content
+
+    def extract_action(json_data):
+        markdown_content = ""
+        agents = json_data["agents"]
+        for agent_name, agent_data in agents.items():
+            if agent_name not in last_state.keys():
+                last_state[agent_name] = {"currently": "", "location": "", "action": ""}
+
+            location = "，".join(agent_data["action"]["event"]["address"])
+            action = agent_data["action"]["event"]["describe"]
+
+            if location == last_state[agent_name]["location"] and action == last_state[agent_name]["action"]:
+                continue
+
+            last_state[agent_name]["location"] = location
+            last_state[agent_name]["action"] = action
+
+            if len(markdown_content) < 1:
+                markdown_content = f"# {json_data['time']}\n\n"
+                markdown_content += "## 活动记录：\n\n"
+
+            markdown_content += f"### {agent_name}\n"
+
+            if len(action) < 1:
+                action = "睡觉"
+
+            markdown_content += f"位置：{location}  \n"
+            markdown_content += f"活动：{action}  \n"
+
+            markdown_content += f"\n"
+
+        if json_data['time'] not in conversation.keys():
+            return markdown_content
+
+        markdown_content += "## 对话记录：\n\n"
+        for chats in conversation[json_data['time']]:
+            for agents, chat in chats.items():
+                markdown_content += f"### {agents}\n\n"
+                for item in chat:
+                    markdown_content += f"`{item[0]}`\n> {item[1]}\n\n"
+        return markdown_content
+
+    all_markdown_content = extract_description()
+    files = sorted(os.listdir(checkpoints_folder))
+    for file_name in files:
+        if (not file_name.endswith(".json")) or (file_name == conversation_file):
+            continue
+
+        file_path = os.path.join(checkpoints_folder, file_name)
+        with open(file_path, "r", encoding="utf-8") as f:
+            json_data = json.load(f)
+            content = extract_action(json_data)
+            all_markdown_content += content + "\n\n"
+    with open(f"{compressed_folder}/{compressed_file}", "w", encoding="utf-8") as compressed_file:
+        compressed_file.write(all_markdown_content)
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--name", type=str, default="", help="the name of the simulation")
+args = parser.parse_args()
+
+
+if __name__ == "__main__":
+    name = args.name
+    if len(name) < 1:
+        name = input("Please enter a simulation name: ")
+
+    while not os.path.exists(f"results/checkpoints/{name}"):
+        name = input(f"'{name}' doesn't exists, please re-enter the simulation name: ")
+
+    checkpoints_folder = f"results/checkpoints/{name}"
+    compressed_folder = f"results/compressed/{name}"
+    os.makedirs(compressed_folder, exist_ok=True)
+
+    generate_report(checkpoints_folder, compressed_folder, file_markdown)
+    generate_movement(checkpoints_folder, compressed_folder, file_movement)
+
+
+==============================
+File: generative_agents/modules/agent.py
+==============================
+
+"""generative_agents.agent"""
+
+import os
+import math
+import random
+import datetime
+
+from modules import memory, prompt, utils
+from modules.model.llm_model import create_llm_model
+from modules.memory.associate import Concept
+
+
+class Agent:
+    def __init__(self, config, maze, conversation, logger):
+        self.name = config["name"]
+        self.maze = maze
+        self.conversation = conversation
+        self._llm = None
+        self.logger = logger
+
+        # agent config
+        self.percept_config = config["percept"]
+        self.think_config = config["think"]
+        self.chat_iter = config["chat_iter"]
+
+        # memory
+        self.spatial = memory.Spatial(**config["spatial"])
+        self.schedule = memory.Schedule(**config["schedule"])
+        self.associate = memory.Associate(
+            os.path.join(config["storage_root"], "associate"), **config["associate"]
+        )
+        self.concepts, self.chats = [], config.get("chats", [])
+
+        # prompt
+        self.scratch = prompt.Scratch(self.name, config["currently"], config["scratch"])
+
+        # status
+        status = {"poignancy": 0}
+        self.status = utils.update_dict(status, config.get("status", {}))
+        self.plan = config.get("plan", {})
+
+        # record
+        self.last_record = utils.get_timer().daily_duration()
+
+        # action and events
+        if "action" in config:
+            self.action = memory.Action.from_dict(config["action"])
+            tiles = self.maze.get_address_tiles(self.get_event().address)
+            config["coord"] = random.choice(list(tiles))
+        else:
+            tile = self.maze.tile_at(config["coord"])
+            address = tile.get_address("game_object", as_list=True)
+            self.action = memory.Action(
+                memory.Event(self.name, address=address),
+                memory.Event(address[-1], address=address),
+            )
+
+        # update maze
+        self.coord, self.path = None, None
+        self.move(config["coord"], config.get("path"))
+        if self.coord is None:
+            self.coord = config["coord"]
+
+    def abstract(self):
+        des = {
+            "name": self.name,
+            "currently": self.scratch.currently,
+            "tile": self.maze.tile_at(self.coord).abstract(),
+            "status": self.status,
+            "concepts": {c.node_id: c.abstract() for c in self.concepts},
+            "chats": self.chats,
+            "action": self.action.abstract(),
+            "associate": self.associate.abstract(),
+        }
+        if self.schedule.scheduled():
+            des["schedule"] = self.schedule.abstract()
+        if self.llm_available():
+            des["llm"] = self._llm.get_summary()
+        # if self.plan.get("path"):
+        #     des["path"] = "-".join(
+        #         ["{},{}".format(c[0], c[1]) for c in self.plan["path"]]
+        #     )
+        return des
+
+    def __str__(self):
+        return utils.dump_dict(self.abstract())
+
+    def reset(self):
+        if not self._llm:
+            self._llm = create_llm_model(self.think_config["llm"])
+
+    def completion(self, func_hint, *args, **kwargs):
+        assert hasattr(
+            self.scratch, "prompt_" + func_hint
+        ), "Can not find func prompt_{} from scratch".format(func_hint)
+        func = getattr(self.scratch, "prompt_" + func_hint)
+        prompt = func(*args, **kwargs)
+        title, msg = "{}.{}".format(self.name, func_hint), {}
+        if self.llm_available():
+            self.logger.info("{} -> {}".format(self.name, func_hint))
+            output = self._llm.completion(**prompt, caller=func_hint)
+            responses = self._llm.meta_responses
+            msg = {"<PROMPT>": "\n" + prompt["prompt"] + "\n"}
+            msg.update(
+                {
+                    "<RESPONSE[{}/{}]>".format(idx+1, len(responses)): "\n" + r + "\n"
+                    for idx, r in enumerate(responses)
+                }
+            )
+        else:
+            output = prompt.get("failsafe")
+        msg["<OUTPUT>"] = "\n" + str(output) + "\n"
+        self.logger.debug(utils.block_msg(title, msg))
+        return output
+
+    def think(self, status, agents):
+        events = self.move(status["coord"], status.get("path"))
+        plan, _ = self.make_schedule()
+
+        if (plan["describe"] == "sleeping" or "睡" in plan["describe"]) and self.is_awake():
+            self.logger.info("{} is going to sleep...".format(self.name))
+            address = self.spatial.find_address("睡觉", as_list=True)
+            tiles = self.maze.get_address_tiles(address)
+            coord = random.choice(list(tiles))
+            events = self.move(coord)
+            self.action = memory.Action(
+                memory.Event(self.name, "正在", "睡觉", address=address, emoji="😴"),
+                memory.Event(
+                    address[-1],
+                    "被占用",
+                    self.name,
+                    address=address,
+                    emoji="🛌",
+                ),
+                duration=plan["duration"],
+                start=utils.get_timer().daily_time(plan["start"]),
+            )
+        if self.is_awake():
+            self.percept()
+            self.make_plan(agents)
+            self.reflect()
+        else:
+            if self.action.finished():
+                self.action = self._determine_action()
+
+        emojis = {}
+        if self.action:
+            emojis[self.name] = {"emoji": self.get_event().emoji, "coord": self.coord}
+        for eve, coord in events.items():
+            if eve.subject in agents:
+                continue
+            emojis[":".join(eve.address)] = {"emoji": eve.emoji, "coord": coord}
+        self.plan = {
+            "name": self.name,
+            "path": self.find_path(agents),
+            "emojis": emojis,
+        }
+        return self.plan
+
+    def move(self, coord, path=None):
+        events = {}
+
+        def _update_tile(coord):
+            tile = self.maze.tile_at(coord)
+            if not self.action:
+                return {}
+            if not tile.update_events(self.get_event()):
+                tile.add_event(self.get_event())
+            obj_event = self.get_event(False)
+            if obj_event:
+                self.maze.update_obj(coord, obj_event)
+            return {e: coord for e in tile.get_events()}
+
+        if self.coord and self.coord != coord:
+            tile = self.get_tile()
+            tile.remove_events(subject=self.name)
+            if tile.has_address("game_object"):
+                addr = tile.get_address("game_object")
+                self.maze.update_obj(
+                    self.coord, memory.Event(addr[-1], address=addr)
+                )
+            events.update({e: self.coord for e in tile.get_events()})
+        if not path:
+            events.update(_update_tile(coord))
+        self.coord = coord
+        self.path = path or []
+
+        return events
+
+    def make_schedule(self):
+        if not self.schedule.scheduled():
+            self.logger.info("{} is making schedule...".format(self.name))
+            # update currently
+            if self.associate.index.nodes_num > 0:
+                self.associate.cleanup_index()
+                focus = [
+                    f"{self.name} 在 {utils.get_timer().daily_format_cn()} 的计划。",
+                    f"在 {self.name} 的生活中，重要的近期事件。",
+                ]
+                retrieved = self.associate.retrieve_focus(focus)
+                self.logger.info(
+                    "{} retrieved {} concepts".format(self.name, len(retrieved))
+                )
+                if retrieved:
+                    plan = self.completion("retrieve_plan", retrieved)
+                    thought = self.completion("retrieve_thought", retrieved)
+                    self.scratch.currently = self.completion(
+                        "retrieve_currently", plan, thought
+                    )
+            # make init schedule
+            self.schedule.create = utils.get_timer().get_date()
+            wake_up = self.completion("wake_up")
+            init_schedule = self.completion("schedule_init", wake_up)
+            # make daily schedule
+            hours = [f"{i}:00" for i in range(24)]
+            # seed = [(h, "sleeping") for h in hours[:wake_up]]
+            seed = [(h, "睡觉") for h in hours[:wake_up]]
+            seed += [(h, "") for h in hours[wake_up:]]
+            schedule = {}
+            for _ in range(self.schedule.max_try):
+                schedule = {h: s for h, s in seed[:wake_up]}
+                schedule.update(
+                    self.completion("schedule_daily", wake_up, init_schedule)
+                )
+                if len(set(schedule.values())) >= self.schedule.diversity:
+                    break
+
+            def _to_duration(date_str):
+                return utils.daily_duration(utils.to_date(date_str, "%H:%M"))
+
+            schedule = {_to_duration(k): v for k, v in schedule.items()}
+            starts = list(sorted(schedule.keys()))
+            for idx, start in enumerate(starts):
+                end = starts[idx + 1] if idx + 1 < len(starts) else 24 * 60
+                self.schedule.add_plan(schedule[start], end - start)
+            schedule_time = utils.get_timer().time_format_cn(self.schedule.create)
+            thought = "这是 {} 在 {} 的计划：{}".format(
+                self.name, schedule_time, "；".join(init_schedule)
+            )
+            event = memory.Event(
+                self.name,
+                "计划",
+                schedule_time,
+                describe=thought,
+                address=self.get_tile().get_address(),
+            )
+            self._add_concept(
+                "thought",
+                event,
+                expire=self.schedule.create + datetime.timedelta(days=30),
+            )
+        # decompose current plan
+        plan, _ = self.schedule.current_plan()
+        if self.schedule.decompose(plan):
+            decompose_schedule = self.completion(
+                "schedule_decompose", plan, self.schedule
+            )
+            decompose, start = [], plan["start"]
+            for describe, duration in decompose_schedule:
+                decompose.append(
+                    {
+                        "idx": len(decompose),
+                        "describe": describe,
+                        "start": start,
+                        "duration": duration,
+                    }
+                )
+                start += duration
+            plan["decompose"] = decompose
+        return self.schedule.current_plan()
+
+    def revise_schedule(self, event, start, duration):
+        self.action = memory.Action(event, start=start, duration=duration)
+        plan, _ = self.schedule.current_plan()
+        if len(plan["decompose"]) > 0:
+            plan["decompose"] = self.completion(
+                "schedule_revise", self.action, self.schedule
+            )
+
+    def percept(self):
+        scope = self.maze.get_scope(self.coord, self.percept_config)
+        # add spatial memory
+        for tile in scope:
+            if tile.has_address("game_object"):
+                self.spatial.add_leaf(tile.address)
+        events, arena = {}, self.get_tile().get_address("arena")
+        # gather events in scope
+        for tile in scope:
+            if not tile.events or tile.get_address("arena") != arena:
+                continue
+            dist = math.dist(tile.coord, self.coord)
+            for event in tile.get_events():
+                if dist < events.get(event, float("inf")):
+                    events[event] = dist
+        events = list(sorted(events.keys(), key=lambda k: events[k]))
+        # get concepts
+        self.concepts, valid_num = [], 0
+        for idx, event in enumerate(events[: self.percept_config["att_bandwidth"]]):
+            recent_nodes = (
+                self.associate.retrieve_events() + self.associate.retrieve_chats()
+            )
+            recent_nodes = set(n.describe for n in recent_nodes)
+            if event.get_describe() not in recent_nodes:
+                if event.object == "idle" or event.object == "空闲":
+                    node = Concept.from_event(
+                        "idle_" + str(idx), "event", event, poignancy=1
+                    )
+                else:
+                    valid_num += 1
+                    node_type = "chat" if event.fit(self.name, "对话") else "event"
+                    node = self._add_concept(node_type, event)
+                    self.status["poignancy"] += node.poignancy
+                self.concepts.append(node)
+        self.concepts = [c for c in self.concepts if c.event.subject != self.name]
+        self.logger.info(
+            "{} percept {}/{} concepts".format(self.name, valid_num, len(self.concepts))
+        )
+
+    def make_plan(self, agents):
+        if self._reaction(agents):
+            return
+        if self.path:
+            return
+        if self.action.finished():
+            self.action = self._determine_action()
+
+    # create action && object events
+    def make_event(self, subject, describe, address):
+        # emoji = self.completion("describe_emoji", describe)
+        # return self.completion(
+        #     "describe_event", subject, subject + describe, address, emoji
+        # )
+
+        e_describe = describe.replace("(", "").replace(")", "").replace("<", "").replace(">", "")
+        if e_describe.startswith(subject + "此时"):
+            e_describe = e_describe[len(subject + "此时"):]
+        if e_describe.startswith(subject):
+            e_describe = e_describe[len(subject):]
+        event = memory.Event(
+            subject, "此时", e_describe, describe=describe, address=address
+        )
+        return event
+
+    def reflect(self):
+        def _add_thought(thought, evidence=None):
+            # event = self.completion(
+            #     "describe_event",
+            #     self.name,
+            #     thought,
+            #     address=self.get_tile().get_address(),
+            # )
+            event = self.make_event(self.name, thought, self.get_tile().get_address())
+            return self._add_concept("thought", event, filling=evidence)
+
+        if self.status["poignancy"] < self.think_config["poignancy_max"]:
+            return
+        nodes = self.associate.retrieve_events() + self.associate.retrieve_thoughts()
+        if not nodes:
+            return
+        self.logger.info(
+            "{} reflect(P{}/{}) with {} concepts...".format(
+                self.name,
+                self.status["poignancy"],
+                self.think_config["poignancy_max"],
+                len(nodes),
+            )
+        )
+        nodes = sorted(nodes, key=lambda n: n.access, reverse=True)[
+            : self.associate.max_importance
+        ]
+        # summary thought
+        focus = self.completion("reflect_focus", nodes, 3)
+        retrieved = self.associate.retrieve_focus(focus, reduce_all=False)
+        for r_nodes in retrieved.values():
+            thoughts = self.completion("reflect_insights", r_nodes, 5)
+            for thought, evidence in thoughts:
+                _add_thought(thought, evidence)
+        # summary chats
+        if self.chats:
+            recorded, evidence = set(), []
+            for name, _ in self.chats:
+                if name == self.name or name in recorded:
+                    continue
+                res = self.associate.retrieve_chats(name)
+                if res and len(res) > 0:
+                    node = res[-1]
+                    evidence.append(node.node_id)
+            thought = self.completion("reflect_chat_planing", self.chats)
+            _add_thought(f"对于 {self.name} 的计划：{thought}", evidence)
+            thought = self.completion("reflect_chat_memory", self.chats)
+            _add_thought(f"{self.name} {thought}", evidence)
+        self.status["poignancy"] = 0
+        self.chats = []
+
+    def find_path(self, agents):
+        address = self.get_event().address
+        if self.path:
+            return self.path
+        if address == self.get_tile().get_address():
+            return []
+        if address[0] == "<waiting>":
+            return []
+        if address[0] == "<persona>":
+            target_tiles = self.maze.get_around(agents[address[1]].coord)
+        else:
+            target_tiles = self.maze.get_address_tiles(address)
+        if tuple(self.coord) in target_tiles:
+            return []
+
+        # filter tile with self event
+        def _ignore_target(t_coord):
+            if list(t_coord) == list(self.coord):
+                return True
+            events = self.maze.tile_at(t_coord).get_events()
+            if any(e.subject in agents for e in events):
+                return True
+            return False
+
+        target_tiles = [t for t in target_tiles if not _ignore_target(t)]
+        if not target_tiles:
+            return []
+        if len(target_tiles) >= 4:
+            target_tiles = random.sample(target_tiles, 4)
+        pathes = {t: self.maze.find_path(self.coord, t) for t in target_tiles}
+        target = min(pathes, key=lambda p: len(pathes[p]))
+        return pathes[target][1:]
+
+    def _determine_action(self):
+        self.logger.info("{} is determining action...".format(self.name))
+        plan, de_plan = self.schedule.current_plan()
+        describes = [plan["describe"], de_plan["describe"]]
+        address = self.spatial.find_address(describes[0], as_list=True)
+        if not address:
+            tile = self.get_tile()
+            kwargs = {
+                "describes": describes,
+                "spatial": self.spatial,
+                "address": tile.get_address("world", as_list=True),
+            }
+            kwargs["address"].append(
+                self.completion("determine_sector", **kwargs, tile=tile)
+            )
+            arenas = self.spatial.get_leaves(kwargs["address"])
+            if len(arenas) == 1:
+                kwargs["address"].append(arenas[0])
+            else:
+                kwargs["address"].append(self.completion("determine_arena", **kwargs))
+            objs = self.spatial.get_leaves(kwargs["address"])
+            if len(objs) == 1:
+                kwargs["address"].append(objs[0])
+            elif len(objs) > 1:
+                kwargs["address"].append(self.completion("determine_object", **kwargs))
+            address = kwargs["address"]
+
+        event = self.make_event(self.name, describes[-1], address)
+        obj_describe = self.completion("describe_object", address[-1], describes[-1])
+        obj_event = self.make_event(address[-1], obj_describe, address)
+
+        event.emoji = f"{de_plan['describe']}"
+
+        return memory.Action(
+            event,
+            obj_event,
+            duration=de_plan["duration"],
+            start=utils.get_timer().daily_time(de_plan["start"]),
+        )
+
+    def _reaction(self, agents=None, ignore_words=None):
+        focus = None
+        ignore_words = ignore_words or ["空闲"]
+
+        def _focus(concept):
+            return concept.event.subject in agents
+
+        def _ignore(concept):
+            return any(i in concept.describe for i in ignore_words)
+
+        if agents:
+            priority = [i for i in self.concepts if _focus(i)]
+            if priority:
+                focus = random.choice(priority)
+        if not focus:
+            priority = [i for i in self.concepts if not _ignore(i)]
+            if priority:
+                focus = random.choice(priority)
+        if not focus or focus.event.subject not in agents:
+            return
+        other, focus = agents[focus.event.subject], self.associate.get_relation(focus)
+
+        if self._chat_with(other, focus):
+            return True
+        if self._wait_other(other, focus):
+            return True
+        return False
+
+    def _skip_react(self, other):
+        def _skip(event):
+            if not event.address or "sleeping" in event.get_describe(False) or "睡觉" in event.get_describe(False):
+                return True
+            if event.predicate == "待开始":
+                return True
+            return False
+
+        if utils.get_timer().daily_duration(mode="hour") >= 23:
+            return True
+        if _skip(self.get_event()) or _skip(other.get_event()):
+            return True
+        return False
+
+    def _chat_with(self, other, focus):
+        if len(self.schedule.daily_schedule) < 1 or len(other.schedule.daily_schedule) < 1:
+            # initializing
+            return False
+        if self._skip_react(other):
+            return False
+        if other.path:
+            return False
+        if self.get_event().fit(predicate="对话") or other.get_event().fit(predicate="对话"):
+            return False
+
+        chats = self.associate.retrieve_chats(other.name)
+        if chats:
+            delta = utils.get_timer().get_delta(chats[0].create)
+            self.logger.info(
+                "retrieved chat between {} and {}({} min):\n{}".format(
+                    self.name, other.name, delta, chats[0]
+                )
+            )
+            if delta < 60:
+                return False
+
+        if not self.completion("decide_chat", self, other, focus, chats):
+            return False
+
+        self.logger.info("{} decides chat with {}".format(self.name, other.name))
+        start, chats = utils.get_timer().get_date(), []
+        relations = [
+            self.completion("summarize_relation", self, other.name),
+            other.completion("summarize_relation", other, self.name),
+        ]
+
+        for i in range(self.chat_iter):
+            text = self.completion(
+                "generate_chat", self, other, relations[0], chats
+            )
+
+            if i > 0:
+                # 对于发起对话的Agent，从第2轮对话开始，检查是否出现“复读”现象
+                end = self.completion(
+                    "generate_chat_check_repeat", self, chats, text
+                )
+                if end:
+                    break
+
+                # 对于发起对话的Agent，从第2轮对话开始，检查话题是否结束
+                chats.append((self.name, text))
+                end = self.completion(
+                    "decide_chat_terminate", self, other, chats
+                )
+                if end:
+                    break
+            else :
+                chats.append((self.name, text))
+
+            text = other.completion(
+                "generate_chat", other, self, relations[1], chats
+            )
+            if i > 0:
+                # 对于响应对话的Agent，从第2轮开始，检查是否出现“复读”现象
+                end = self.completion(
+                    "generate_chat_check_repeat", other, chats, text
+                )
+                if end:
+                    break
+
+            chats.append((other.name, text))
+
+            # 对于响应对话的Agent，从第1轮开始，检查话题是否结束
+            end = other.completion(
+                "decide_chat_terminate", other, self, chats
+            )
+            if end:
+                break
+
+        key = utils.get_timer().get_date("%Y%m%d-%H:%M")
+        if key not in self.conversation.keys():
+            self.conversation[key] = []
+        self.conversation[key].append({f"{self.name} -> {other.name} @ {'，'.join(self.get_event().address)}": chats})
+
+        self.logger.info(
+            "{} and {} has chats\n  {}".format(
+                self.name,
+                other.name,
+                "\n  ".join(["{}: {}".format(n, c) for n, c in chats]),
+            )
+        )
+        chat_summary = self.completion("summarize_chats", chats)
+        duration = int(sum([len(c[1]) for c in chats]) / 240)
+        self.schedule_chat(
+            chats, chat_summary, start, duration, other
+        )
+        other.schedule_chat(chats, chat_summary, start, duration, self)
+        return True
+
+    def _wait_other(self, other, focus):
+        if self._skip_react(other):
+            return False
+        if not self.path:
+            return False
+        if self.get_event().address != other.get_tile().get_address():
+            return False
+        if not self.completion("decide_wait", self, other, focus):
+            return False
+        self.logger.info("{} decides wait to {}".format(self.name, other.name))
+        start = utils.get_timer().get_date()
+        # duration = other.action.end - start
+        t = other.action.end - start
+        duration = int(t.total_seconds() / 60)
+        event = memory.Event(
+            self.name,
+            "waiting to start",
+            self.get_event().get_describe(False),
+            # address=["<waiting>"] + self.get_event().address,
+            address=self.get_event().address,
+            emoji=f"⌛",
+        )
+        self.revise_schedule(event, start, duration)
+
+    def schedule_chat(self, chats, chats_summary, start, duration, other, address=None):
+        self.chats.extend(chats)
+        event = memory.Event(
+            self.name,
+            "对话",
+            other.name,
+            describe=chats_summary,
+            address=address or self.get_tile().get_address(),
+            emoji=f"💬",
+        )
+        self.revise_schedule(event, start, duration)
+
+    def _add_concept(
+        self,
+        e_type,
+        event,
+        create=None,
+        expire=None,
+        filling=None,
+    ):
+        if event.fit(None, "is", "idle"):
+            poignancy = 1
+        elif event.fit(None, "此时", "空闲"):
+            poignancy = 1
+        elif e_type == "chat":
+            poignancy = self.completion("poignancy_chat", event)
+        else:
+            poignancy = self.completion("poignancy_event", event)
+        self.logger.debug("{} add associate {}".format(self.name, event))
+        return self.associate.add_node(
+            e_type,
+            event,
+            poignancy,
+            create=create,
+            expire=expire,
+            filling=filling,
+        )
+
+    def get_tile(self):
+        return self.maze.tile_at(self.coord)
+
+    def get_event(self, as_act=True):
+        return self.action.event if as_act else self.action.obj_event
+
+    def is_awake(self):
+        if not self.action:
+            return True
+        if self.get_event().fit(self.name, "is", "sleeping"):
+            return False
+        if self.get_event().fit(self.name, "正在", "睡觉"):
+            return False
+        return True
+
+    def llm_available(self):
+        if not self._llm:
+            return False
+        return self._llm.is_available()
+
+    def to_dict(self, with_action=True):
+        info = {
+            "status": self.status,
+            "schedule": self.schedule.to_dict(),
+            "associate": self.associate.to_dict(),
+            "chats": self.chats,
+            "currently": self.scratch.currently,
+        }
+        if with_action:
+            info.update({"action": self.action.to_dict()})
+        return info
+
+
+==============================
+File: generative_agents/modules/maze.py
+==============================
+
+"""generative_agents.maze"""
+
+import random
+from itertools import product
+
+from modules import utils
+from modules.memory.event import Event
+
+
+class Tile:
+    def __init__(
+        self,
+        coord,
+        world,
+        address_keys,
+        address=None,
+        collision=False,
+    ):
+        # in order: world, sector, arena, game_object
+        self.coord = coord
+        self.address = [world]
+        if address:
+            self.address += address
+        self.address_keys = address_keys
+        self.address_map = dict(zip(address_keys[: len(self.address)], self.address))
+        self.collision = collision
+        self.event_cnt = 0
+        self._events = {}
+        if len(self.address) == 4:
+            self.add_event(Event(self.address[-1], address=self.address))
+
+    def abstract(self):
+        address = ":".join(self.address)
+        if self.collision:
+            address += "(collision)"
+        return {
+            "coord[{},{}]".format(self.coord[0], self.coord[1]): address,
+            "events": {k: str(v) for k, v in self.events.items()},
+        }
+
+    def __str__(self):
+        return utils.dump_dict(self.abstract())
+
+    def __eq__(self, other):
+        if isinstance(other, Tile):
+            return hash(self.coord) == hash(other.coord)
+        return False
+
+    def get_events(self):
+        return self.events.values()
+
+    def add_event(self, event):
+        if isinstance(event, (tuple, list)):
+            event = Event.from_list(event)
+        if all(e != event for e in self._events.values()):
+            self._events["e_" + str(self.event_cnt)] = event
+            self.event_cnt += 1
+        return event
+
+    def remove_events(self, subject=None, event=None):
+        r_events = {}
+        for tag, eve in self._events.items():
+            if subject and eve.subject == subject:
+                r_events[tag] = eve
+            if event and eve == event:
+                r_events[tag] = eve
+        for r_eve in r_events:
+            self._events.pop(r_eve)
+        return r_events
+
+    def update_events(self, event, match="subject"):
+        u_events = {}
+        for tag, eve in self._events.items():
+            if match == "subject" and eve.subject == event.subject:
+                self._events[tag] = event
+                u_events[tag] = event
+        return u_events
+
+    def has_address(self, key):
+        return key in self.address_map
+
+    def get_address(self, level=None, as_list=True):
+        level = level or self.address_keys[-1]
+        assert level in self.address_keys, "Can not find {} from {}".format(
+            level, self.address_keys
+        )
+        pos = self.address_keys.index(level) + 1
+        if as_list:
+            return self.address[:pos]
+        return ":".join(self.address[:pos])
+
+    def get_addresses(self):
+        addresses = []
+        if len(self.address) > 1:
+            addresses = [
+                ":".join(self.address[:i]) for i in range(2, len(self.address) + 1)
+            ]
+        return addresses
+
+    @property
+    def events(self):
+        return self._events
+
+    @property
+    def is_empty(self):
+        return len(self.address) == 1 and not self._events
+
+
+class Maze:
+    def __init__(self, config, logger):
+        # define tiles
+        self.maze_height, self.maze_width = config["size"]
+        self.tile_size = config["tile_size"]
+        address_keys = config["tile_address_keys"]
+        self.tiles = [
+            [
+                Tile((x, y), config["world"], address_keys)
+                for x in range(self.maze_width)
+            ]
+            for y in range(self.maze_height)
+        ]
+        for tile in config["tiles"]:
+            x, y = tile.pop("coord")
+            self.tiles[y][x] = Tile((x, y), config["world"], address_keys, **tile)
+
+        # define address
+        self.address_tiles = dict()
+        for i in range(self.maze_height):
+            for j in range(self.maze_width):
+                for add in self.tile_at([j, i]).get_addresses():
+                    self.address_tiles.setdefault(add, set()).add((j, i))
+
+        self.logger = logger
+
+    def find_path(self, src_coord, dst_coord):
+        map = [[0 for _ in range(self.maze_width)] for _ in range(self.maze_height)]
+        frontier, visited = [src_coord], set()
+        map[src_coord[1]][src_coord[0]] = 1
+        while map[dst_coord[1]][dst_coord[0]] == 0:
+            new_frontier = []
+            for f in frontier:
+                for c in self.get_around(f):
+                    if (
+                        0 < c[0] < self.maze_width - 1
+                        and 0 < c[1] < self.maze_height - 1
+                        and map[c[1]][c[0]] == 0
+                        and c not in visited
+                    ):
+                        map[c[1]][c[0]] = map[f[1]][f[0]] + 1
+                        new_frontier.append(c)
+                        visited.add(c)
+            frontier = new_frontier
+        step = map[dst_coord[1]][dst_coord[0]]
+        path = [dst_coord]
+        while step > 1:
+            for c in self.get_around(path[-1]):
+                if map[c[1]][c[0]] == step - 1:
+                    path.append(c)
+                    break
+            step -= 1
+        return path[::-1]
+
+    def tile_at(self, coord):
+        return self.tiles[coord[1]][coord[0]]
+
+    def update_obj(self, coord, obj_event):
+        tile = self.tile_at(coord)
+        if not tile.has_address("game_object"):
+            return
+        if obj_event.address != tile.get_address("game_object"):
+            return
+        addr = ":".join(obj_event.address)
+        if addr not in self.address_tiles:
+            return
+        for c in self.address_tiles[addr]:
+            self.tile_at(c).update_events(obj_event)
+
+    def get_scope(self, coord, config):
+        coords = []
+        vision_r = config["vision_r"]
+        if config["mode"] == "box":
+            x_range = [
+                max(coord[0] - vision_r, 0),
+                min(coord[0] + vision_r + 1, self.maze_width),
+            ]
+            y_range = [
+                max(coord[1] - vision_r, 0),
+                min(coord[1] + vision_r + 1, self.maze_height),
+            ]
+            coords = list(product(list(range(*x_range)), list(range(*y_range))))
+        return [self.tile_at(c) for c in coords]
+
+    def get_around(self, coord, no_collision=True):
+        coords = [
+            (coord[0] - 1, coord[1]),
+            (coord[0] + 1, coord[1]),
+            (coord[0], coord[1] - 1),
+            (coord[0], coord[1] + 1),
+        ]
+        if no_collision:
+            coords = [c for c in coords if not self.tile_at(c).collision]
+        return coords
+
+    def get_address_tiles(self, address):
+        addr = ":".join(address)
+        if addr in self.address_tiles:
+            return self.address_tiles[addr]
+        return random.choice(self.address_tiles.values())
+
+
+==============================
+File: generative_agents/modules/game.py
+==============================
+
+"""generative_agents.game"""
+
+import os
+import copy
+
+from modules.utils import GenerativeAgentsMap, GenerativeAgentsKey
+from modules import utils
+from .maze import Maze
+from .agent import Agent
+
+
+class Game:
+    """The Game"""
+
+    def __init__(self, name, static_root, config, conversation, logger=None):
+        self.name = name
+        self.static_root = static_root
+        self.record_iterval = config.get("record_iterval", 30)
+        self.logger = logger or utils.IOLogger()
+        self.maze = Maze(self.load_static(config["maze"]["path"]), self.logger)
+        self.conversation = conversation
+        self.agents = {}
+        if "agent_base" in config:
+            agent_base = config["agent_base"]
+        else:
+            agent_base = {}
+        storage_root = os.path.join(f"results/checkpoints/{name}", "storage")
+        if not os.path.isdir(storage_root):
+            os.makedirs(storage_root)
+        for name, agent in config["agents"].items():
+            agent_config = utils.update_dict(
+                copy.deepcopy(agent_base), self.load_static(agent["config_path"])
+            )
+            agent_config = utils.update_dict(agent_config, agent)
+
+            agent_config["storage_root"] = os.path.join(storage_root, name)
+            self.agents[name] = Agent(agent_config, self.maze, self.conversation, self.logger)
+
+    def get_agent(self, name):
+        return self.agents[name]
+
+    def agent_think(self, name, status):
+        agent = self.get_agent(name)
+        plan = agent.think(status, self.agents)
+        info = {
+            "currently": agent.scratch.currently,
+            "associate": agent.associate.abstract(),
+            "concepts": {c.node_id: c.abstract() for c in agent.concepts},
+            "chats": [
+                {"name": "self" if n == agent.name else n, "chat": c}
+                for n, c in agent.chats
+            ],
+            "action": agent.action.abstract(),
+            "schedule": agent.schedule.abstract(),
+            "address": agent.get_tile().get_address(as_list=False),
+        }
+        if (
+            utils.get_timer().daily_duration() - agent.last_record
+        ) > self.record_iterval:
+            info["record"] = True
+            agent.last_record = utils.get_timer().daily_duration()
+        else:
+            info["record"] = False
+        if agent.llm_available():
+            info["llm"] = agent._llm.get_summary()
+        title = "{}.summary @ {}".format(
+            name, utils.get_timer().get_date("%Y%m%d-%H:%M:%S")
+        )
+        self.logger.info("\n{}\n{}\n".format(utils.split_line(title), agent))
+        return {"plan": plan, "info": info}
+
+    def load_static(self, path):
+        return utils.load_dict(os.path.join(self.static_root, path))
+
+    def reset_game(self):
+        for a_name, agent in self.agents.items():
+            agent.reset()
+            title = "{}.reset".format(a_name)
+            self.logger.info("\n{}\n{}\n".format(utils.split_line(title), agent))
+
+
+def create_game(name, static_root, config, conversation, logger=None):
+    """Create the game"""
+
+    utils.set_timer(**config.get("time", {}))
+    GenerativeAgentsMap.set(GenerativeAgentsKey.GAME, Game(name, static_root, config, conversation, logger=logger))
+    return GenerativeAgentsMap.get(GenerativeAgentsKey.GAME)
+
+
+def get_game():
+    """Get the gloabl game"""
+
+    return GenerativeAgentsMap.get(GenerativeAgentsKey.GAME)
+
+
+==============================
+File: generative_agents/modules/__init__.py
+==============================
+
+
+
+==============================
+File: generative_agents/modules/storage/__init__.py
+==============================
+
+"""generative_agents.storage"""
+
+
+==============================
+File: generative_agents/modules/storage/index.py
+==============================
+
+"""generative_agents.storage.index"""
+
+import os
+import time
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from llama_index.core.indices.vector_store.retrievers import VectorIndexRetriever
+from llama_index.core.schema import TextNode
+from llama_index import core as index_core
+from llama_index.embeddings.ollama import OllamaEmbedding
+from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_index.core.node_parser import SentenceSplitter
+from llama_index.core import Settings
+
+from modules import utils
+
+
+class LlamaIndex:
+    def __init__(self, embedding_config, path=None):
+        self._config = {"max_nodes": 0}
+        if embedding_config["provider"] == "hugging_face":
+            embed_model = HuggingFaceEmbedding(model_name=embedding_config["model"])
+        elif embedding_config["provider"] == "ollama":
+            embed_model = OllamaEmbedding(
+                model_name=embedding_config["model"],
+                base_url=embedding_config["base_url"],
+                ollama_additional_kwargs={"mirostat": 0},
+            )
+        elif embedding_config["provider"] == "openai":
+            embed_model = OpenAIEmbedding(
+                model_name=embedding_config["model"],
+                api_base=embedding_config["base_url"],
+                api_key=embedding_config["api_key"],
+            )
+        else:
+            raise NotImplementedError(
+                "embedding provider {} is not supported".format(embedding_config["provider"])
+            )
+
+        Settings.embed_model = embed_model
+        Settings.node_parser = SentenceSplitter(chunk_size=512, chunk_overlap=64)
+        Settings.num_output = 1024
+        Settings.context_window = 4096
+        if path and os.path.exists(path):
+            self._index = index_core.load_index_from_storage(
+                index_core.StorageContext.from_defaults(persist_dir=path),
+                show_progress=True,
+            )
+            self._config = utils.load_dict(os.path.join(path, "index_config.json"))
+        else:
+            self._index = index_core.VectorStoreIndex([], show_progress=True)
+        self._path = path
+
+    def add_node(
+        self,
+        text,
+        metadata=None,
+        exclude_llm_keys=None,
+        exclude_embedding_keys=None,
+        id=None,
+    ):
+        while True:
+            try:
+                metadata = metadata or {}
+                exclude_llm_keys = exclude_llm_keys or list(metadata.keys())
+                exclude_embedding_keys = exclude_embedding_keys or list(metadata.keys())
+                id = id or "node_" + str(self._config["max_nodes"])
+                self._config["max_nodes"] += 1
+                node = TextNode(
+                    text=text,
+                    id_=id,
+                    metadata=metadata,
+                    excluded_llm_metadata_keys=exclude_llm_keys,
+                    excluded_embed_metadata_keys=exclude_embedding_keys,
+                )
+                self._index.insert_nodes([node])
+                return node
+            except Exception as e:
+                print(f"LlamaIndex.add_node() caused an error: {e}")
+                time.sleep(5)
+
+    def has_node(self, node_id):
+        return node_id in self._index.docstore.docs
+
+    def find_node(self, node_id):
+        return self._index.docstore.docs[node_id]
+
+    def get_nodes(self, filter=None):
+        def _check(node):
+            if not filter:
+                return True
+            return filter(node)
+
+        return [n for n in self._index.docstore.docs.values() if _check(n)]
+
+    def remove_nodes(self, node_ids, delete_from_docstore=True):
+        self._index.delete_nodes(node_ids, delete_from_docstore=delete_from_docstore)
+
+    def cleanup(self):
+        now, remove_ids = utils.get_timer().get_date(), []
+        for node_id, node in self._index.docstore.docs.items():
+            create = utils.to_date(node.metadata["create"])
+            expire = utils.to_date(node.metadata["expire"])
+            if create > now or expire < now:
+                remove_ids.append(node_id)
+        self.remove_nodes(remove_ids)
+        return remove_ids
+
+    def retrieve(
+        self,
+        text,
+        similarity_top_k=5,
+        filters=None,
+        node_ids=None,
+        retriever_creator=None,
+    ):
+        try:
+            retriever_creator = retriever_creator or VectorIndexRetriever
+            return retriever_creator(
+                self._index,
+                similarity_top_k=similarity_top_k,
+                filters=filters,
+                node_ids=node_ids,
+            ).retrieve(text)
+        except Exception as e:
+            # print(f"LlamaIndex.retrieve() caused an error: {e}")
+            return []
+
+    def query(
+        self,
+        text,
+        similarity_top_k=5,
+        text_qa_template=None,
+        refine_template=None,
+        filters=None,
+        query_creator=None,
+    ):
+        kwargs = {
+            "similarity_top_k": similarity_top_k,
+            "text_qa_template": text_qa_template,
+            "refine_template": refine_template,
+            "filters": filters,
+        }
+        while True:
+            try:
+                if query_creator:
+                    query_engine = query_creator(retriever=self._index.as_retriever(**kwargs))
+                else:
+                    query_engine = self._index.as_query_engine(**kwargs)
+                return query_engine.query(text)
+            except Exception as e:
+                print(f"LlamaIndex.query() caused an error: {e}")
+                time.sleep(5)
+
+    def save(self, path=None):
+        path = path or self._path
+        self._index.storage_context.persist(path)
+        utils.save_dict(self._config, os.path.join(path, "index_config.json"))
+
+    @property
+    def nodes_num(self):
+        return len(self._index.docstore.docs)
+
+
+==============================
+File: generative_agents/modules/memory/associate.py
+==============================
+
+"""generative_agents.memory.associate"""
+
+import datetime
+from llama_index.core.retrievers import BaseRetriever
+from llama_index.core.vector_stores import MetadataFilters, ExactMatchFilter
+from llama_index.core.indices.vector_store.retrievers import VectorIndexRetriever
+
+from modules.storage.index import LlamaIndex
+from modules import utils
+from .event import Event
+
+
+class Concept:
+    def __init__(
+        self,
+        describe,
+        node_id,
+        node_type,
+        subject,
+        predicate,
+        object,
+        address,
+        poignancy,
+        create=None,
+        expire=None,
+        access=None,
+    ):
+        self.node_id = node_id
+        self.node_type = node_type
+        self.event = Event(
+            subject, predicate, object, describe=describe, address=address.split(":")
+        )
+        self.poignancy = poignancy
+        self.create = utils.to_date(create) if create else utils.get_timer().get_date()
+        if expire:
+            self.expire = utils.to_date(expire)
+        else:
+            self.expire = self.create + datetime.timedelta(days=30)
+        self.access = utils.to_date(access) if access else self.create
+
+    def abstract(self):
+        return {
+            "{}(P.{})".format(self.node_type, self.poignancy): str(self.event),
+            "duration": "{} ~ {} (access: {})".format(
+                self.create.strftime("%Y%m%d-%H:%M"),
+                self.expire.strftime("%Y%m%d-%H:%M"),
+                self.access.strftime("%Y%m%d-%H:%M"),
+            ),
+        }
+
+    def __str__(self):
+        return utils.dump_dict(self.abstract())
+
+    @property
+    def describe(self):
+        return self.event.get_describe()
+
+    @classmethod
+    def from_node(cls, node):
+        return cls(node.text, node.id_, **node.metadata)
+
+    @classmethod
+    def from_event(cls, node_id, node_type, event, poignancy):
+        return cls(
+            event.get_describe(),
+            node_id,
+            node_type,
+            event.subject,
+            event.predicate,
+            event.object,
+            ":".join(event.address),
+            poignancy,
+        )
+
+
+class AssociateRetriever(BaseRetriever):
+    def __init__(self, config, *args, **kwargs) -> None:
+        self._config = config
+        self._vector_retriever = VectorIndexRetriever(*args, **kwargs)
+        super().__init__()
+
+    def _retrieve(self, query_bundle):
+        """Retrieve nodes given query."""
+
+        nodes = self._vector_retriever.retrieve(query_bundle)
+        if not nodes:
+            return []
+        nodes = sorted(
+            nodes, key=lambda n: utils.to_date(n.metadata["access"]), reverse=True
+        )
+        # get scores
+        fac = self._config["recency_decay"]
+        recency_scores = self._normalize(
+            [fac**i for i in range(1, len(nodes) + 1)], self._config["recency_weight"]
+        )
+        relevance_scores = self._normalize(
+            [n.score for n in nodes], self._config["relevance_weight"]
+        )
+        importance_scores = self._normalize(
+            [n.metadata["poignancy"] for n in nodes], self._config["importance_weight"]
+        )
+        final_scores = {
+            n.id_: r1 + r2 + i
+            for n, r1, r2, i in zip(
+                nodes, recency_scores, relevance_scores, importance_scores
+            )
+        }
+        # re-rank nodes
+        nodes = sorted(nodes, key=lambda n: final_scores[n.id_], reverse=True)
+        nodes = nodes[: self._config["retrieve_max"]]
+        for n in nodes:
+            n.metadata["access"] = utils.get_timer().get_date("%Y%m%d-%H:%M:%S")
+        return nodes
+
+    def _normalize(self, data, factor=1, t_min=0, t_max=1):
+        min_val, max_val = min(data), max(data)
+        diff = max_val - min_val
+        if diff == 0:
+            return [(t_max - t_min) * factor / 2 for _ in data]
+        return [(d - min_val) * (t_max - t_min) * factor / diff + t_min for d in data]
+
+
+class Associate:
+    def __init__(
+        self,
+        path,
+        embedding,
+        retention=8,
+        max_memory=-1,
+        max_importance=10,
+        recency_decay=0.995,
+        recency_weight=0.5,
+        relevance_weight=3,
+        importance_weight=2,
+        memory=None,
+    ):
+        self._index = LlamaIndex(embedding, path)
+        self.memory = memory or {"event": [], "thought": [], "chat": []}
+        self.cleanup_index()
+        self.retention = retention
+        self.max_memory = max_memory
+        self.max_importance = max_importance
+        self._retrieve_config = {
+            "recency_decay": recency_decay,
+            "recency_weight": recency_weight,
+            "relevance_weight": relevance_weight,
+            "importance_weight": importance_weight,
+        }
+
+    def abstract(self):
+        des = {"nodes": self._index.nodes_num}
+        for t in ["event", "chat", "thought"]:
+            des[t] = [self.find_concept(c).describe for c in self.memory[t]]
+        return des
+
+    def __str__(self):
+        return utils.dump_dict(self.abstract())
+
+    def cleanup_index(self):
+        node_ids = self._index.cleanup()
+        self.memory = {
+            n_type: [n for n in nodes if n not in node_ids]
+            for n_type, nodes in self.memory.items()
+        }
+
+    def add_node(
+        self,
+        node_type,
+        event,
+        poignancy,
+        create=None,
+        expire=None,
+        filling=None,
+    ):
+        create = create or utils.get_timer().get_date()
+        expire = expire or (create + datetime.timedelta(days=30))
+        metadata = {
+            "node_type": node_type,
+            "subject": event.subject,
+            "predicate": event.predicate,
+            "object": event.object,
+            "address": ":".join(event.address),
+            "poignancy": poignancy,
+            "create": create.strftime("%Y%m%d-%H:%M:%S"),
+            "expire": expire.strftime("%Y%m%d-%H:%M:%S"),
+            "access": create.strftime("%Y%m%d-%H:%M:%S"),
+        }
+        node = self._index.add_node(event.get_describe(), metadata)
+        memory = self.memory[node_type]
+        memory.insert(0, node.id_)
+        if len(memory) >= self.max_memory > 0:
+            self._index.remove_nodes(memory[self.max_memory:])
+            self.memory[node_type] = memory[: self.max_memory - 1]
+        return self.to_concept(node)
+
+    def to_concept(self, node):
+        return Concept.from_node(node)
+
+    def find_concept(self, node_id):
+        return self.to_concept(self._index.find_node(node_id))
+
+    def _retrieve_nodes(self, node_type, text=None):
+        if text:
+            filters = MetadataFilters(
+                filters=[ExactMatchFilter(key="node_type", value=node_type)]
+            )
+            nodes = self._index.retrieve(
+                text, filters=filters, node_ids=self.memory[node_type]
+            )
+        else:
+            nodes = [self._index.find_node(n) for n in self.memory[node_type]]
+        return [self.to_concept(n) for n in nodes[: self.retention]]
+
+    def retrieve_events(self, text=None):
+        return self._retrieve_nodes("event", text)
+
+    def retrieve_thoughts(self, text=None):
+        return self._retrieve_nodes("thought", text)
+
+    def retrieve_chats(self, name=None):
+        text = ("对话 " + name) if name else None
+        return self._retrieve_nodes("chat", text)
+
+    def retrieve_focus(self, focus, retrieve_max=30, reduce_all=True):
+        def _create_retriever(*args, **kwargs):
+            self._retrieve_config["retrieve_max"] = retrieve_max
+            return AssociateRetriever(self._retrieve_config, *args, **kwargs)
+
+        retrieved = {}
+        node_ids = self.memory["event"] + self.memory["thought"]
+        for text in focus:
+            nodes = self._index.retrieve(
+                text,
+                similarity_top_k=len(node_ids),
+                node_ids=node_ids,
+                retriever_creator=_create_retriever,
+            )
+            if reduce_all:
+                retrieved.update({n.id_: n for n in nodes})
+            else:
+                retrieved[text] = nodes
+        if reduce_all:
+            return [self.to_concept(v) for v in retrieved.values()]
+        return {
+            text: [self.to_concept(n) for n in nodes]
+            for text, nodes, in retrieved.items()
+        }
+
+    def get_relation(self, node):
+        return {
+            "node": node,
+            "events": self.retrieve_events(node.describe),
+            "thoughts": self.retrieve_thoughts(node.describe),
+        }
+
+    def to_dict(self):
+        self._index.save()
+        return {"memory": self.memory}
+
+    @property
+    def index(self):
+        return self._index
+
+
+==============================
+File: generative_agents/modules/memory/spatial.py
+==============================
+
+"""generative_agents.memory.spatial"""
+
+import random
+
+from modules import utils
+
+
+class Spatial:
+    def __init__(self, tree, address=None):
+        self.tree = tree
+        self.address = address or {}
+        if "sleeping" not in self.address and "睡觉" not in self.address and "living_area" in self.address:
+            # self.address["sleeping"] = self.address["living_area"] + ["bed"]
+            self.address["睡觉"] = self.address["living_area"] + ["床"]
+
+    def __str__(self):
+        return utils.dump_dict(self.tree)
+
+    def add_leaf(self, address):
+        def _add_leaf(left_address, tree):
+            if len(left_address) == 2:
+                leaves = tree.setdefault(left_address[0], [])
+                if left_address[1] not in leaves:
+                    leaves.append(left_address[1])
+            elif len(left_address) > 2:
+                _add_leaf(left_address[1:], tree.setdefault(left_address[0], {}))
+
+        _add_leaf(address, self.tree)
+
+    def find_address(self, hint, as_list=True):
+        address = []
+        for key, path in self.address.items():
+            if key in hint:
+                address = path
+                break
+        if as_list:
+            return address
+        return ":".join(address)
+
+    def get_leaves(self, address):
+        def _get_tree(address, tree):
+            if not address:
+                if isinstance(tree, dict):
+                    return list(tree.keys())
+                return tree
+            if address[0] not in tree:
+                return []
+            return _get_tree(address[1:], tree[address[0]])
+
+        return _get_tree(address, self.tree)
+
+    def random_address(self):
+        address, tree = [], self.tree
+        while isinstance(tree, dict):
+            roots = [r for r in tree if len(tree[r]) > 0]
+            address.append(random.choice(roots))
+            tree = tree[address[-1]]
+        address.append(random.choice(tree))
+        return address
+
+
+==============================
+File: generative_agents/modules/memory/__init__.py
+==============================
+
+"""generative_agents.memory"""
+
+from .action import *
+from .associate import *
+from .event import *
+from .schedule import *
+from .spatial import *
+
+
+==============================
+File: generative_agents/modules/memory/action.py
+==============================
+
+"""generative_agents.memory.action"""
+
+import datetime
+
+from modules import utils
+from .event import Event
+
+
+class Action:
+    def __init__(
+        self,
+        event,
+        obj_event=None,
+        start=None,
+        duration=0,
+    ):
+        self.event = event
+        self.obj_event = obj_event
+        self.start = start or utils.get_timer().get_date()
+        self.duration = duration
+        self.end = self.start + datetime.timedelta(minutes=self.duration)
+
+    def abstract(self):
+        status = "{} [{}~{}]".format(
+            "已完成" if self.finished() else "进行中",
+            self.start.strftime("%Y%m%d-%H:%M"),
+            self.end.strftime("%Y%m%d-%H:%M"),
+        )
+        info = {"status": status, "event": str(self.event)}
+        if self.obj_event:
+            info["object"] = str(self.obj_event)
+        return info
+
+    def __str__(self):
+        return utils.dump_dict(self.abstract())
+
+    def finished(self):
+        if not self.duration:
+            return True
+        if not self.event.address:
+            return True
+        return utils.get_timer().get_date() > self.end
+
+    def to_dict(self):
+        return {
+            "event": self.event.to_dict(),
+            "obj_event": self.obj_event.to_dict() if self.obj_event else None,
+            "start": self.start.strftime("%Y%m%d-%H:%M:%S"),
+            "duration": self.duration,
+        }
+
+    @classmethod
+    def from_dict(cls, config):
+        config["event"] = Event.from_dict(config["event"])
+        if config.get("obj_event"):
+            config["obj_event"] = Event.from_dict(config["obj_event"])
+        config["start"] = utils.to_date(config["start"])
+        return cls(**config)
+
+
+==============================
+File: generative_agents/modules/memory/event.py
+==============================
+
+"""generative_agents.memory.event"""
+
+
+class Event:
+    def __init__(
+        self,
+        subject,
+        predicate=None,
+        object=None,
+        address=None,
+        describe=None,
+        emoji=None,
+    ):
+        self.subject = subject
+        # self.predicate = predicate or "is"
+        # self.object = object or "idle"
+        self.predicate = predicate or "此时"
+        self.object = object or "空闲"
+        self._describe = describe or ""
+        self.address = address or []
+        self.emoji = emoji or ""
+
+    def __str__(self):
+        if self._describe:
+            des = "{}".format(self._describe)
+        else:
+            des = "{} {} {}".format(self.subject, self.predicate, self.object)
+        # if self.emoji:
+        #     des += "[{}]".format(self.emoji)
+        if self.address:
+            des += " @ " + ":".join(self.address)
+        return des
+
+    def __hash__(self):
+        return hash(
+            (
+                self.subject,
+                self.predicate,
+                self.object,
+                self._describe,
+                ":".join(self.address),
+            )
+        )
+
+    def __eq__(self, other):
+        if isinstance(other, Event):
+            return hash(self) == hash(other)
+        return False
+
+    def update(self, predicate=None, object=None, describe=None):
+        # self.predicate = predicate or "is"
+        # self.object = object or "idle"
+        self.predicate = predicate or "此时"
+        self.object = object or "空闲"
+        self._describe = describe or self._describe
+
+    def to_id(self):
+        return self.subject, self.predicate, self.object, self._describe
+
+    def fit(self, subject=None, predicate=None, object=None):
+        if subject and self.subject != subject:
+            return False
+        if predicate and self.predicate != predicate:
+            return False
+        if object and self.object != object:
+            return False
+        return True
+
+    def to_dict(self):
+        return {
+            "subject": self.subject,
+            "predicate": self.predicate,
+            "object": self.object,
+            "describe": self._describe,
+            "address": self.address,
+            "emoji": self.emoji,
+        }
+
+    def get_describe(self, with_subject=True):
+        describe = self._describe or "{} {}".format(self.predicate, self.object)
+        subject = ""
+        if with_subject:
+            if self.subject not in describe:
+                subject = self.subject + " "
+        else:
+            if describe.startswith(self.subject + " "):
+                describe = describe[len(self.subject) + 1:]
+        return "{}{}".format(subject, describe)
+
+    @classmethod
+    def from_dict(cls, config):
+        return cls(**config)
+
+    @classmethod
+    def from_list(cls, event):
+        if len(event) == 3:
+            return cls(event[0], event[1], event[2])
+        return cls(event[0], event[1], event[2], event[3])
+
+
+==============================
+File: generative_agents/modules/memory/schedule.py
+==============================
+
+"""generative_agents.memory.schedule"""
+
+from modules import utils
+
+
+class Schedule:
+    def __init__(self, create=None, daily_schedule=None, diversity=5, max_try=5):
+        if create:
+            self.create = utils.to_date(create)
+        else:
+            self.create = None
+        self.daily_schedule = daily_schedule or []
+        self.diversity = diversity
+        self.max_try = max_try
+
+    def abstract(self):
+        def _to_stamp(plan):
+            start, end = self.plan_stamps(plan, time_format="%H:%M")
+            return "{}~{}".format(start, end)
+
+        des = {}
+        for plan in self.daily_schedule:
+            stamp = _to_stamp(plan)
+            if plan.get("decompose"):
+                s_info = {_to_stamp(p): p["describe"] for p in plan["decompose"]}
+                des[stamp + ": " + plan["describe"]] = s_info
+            else:
+                des[stamp] = plan["describe"]
+        return des
+
+    def __str__(self):
+        return utils.dump_dict(self.abstract())
+
+    def add_plan(self, describe, duration, decompose=None):
+        if self.daily_schedule:
+            last_plan = self.daily_schedule[-1]
+            start = last_plan["start"] + last_plan["duration"]
+        else:
+            start = 0
+        self.daily_schedule.append(
+            {
+                "idx": len(self.daily_schedule),
+                "describe": describe,
+                "start": start,
+                "duration": duration,
+                "decompose": decompose or {},
+            }
+        )
+        return self.daily_schedule[-1]
+
+    def current_plan(self):
+        total_minute = utils.get_timer().daily_duration()
+        for plan in self.daily_schedule:
+            if self.plan_stamps(plan)[1] <= total_minute:
+                continue
+            for de_plan in plan.get("decompose", []):
+                if self.plan_stamps(de_plan)[1] <= total_minute:
+                    continue
+                return plan, de_plan
+            return plan, plan
+        last_plan = self.daily_schedule[-1]
+        return last_plan, last_plan
+
+    def plan_stamps(self, plan, time_format=None):
+        def _to_date(minutes):
+            return utils.get_timer().daily_time(minutes).strftime(time_format)
+
+        start, end = plan["start"], plan["start"] + plan["duration"]
+        if time_format:
+            start, end = _to_date(start), _to_date(end)
+        return start, end
+
+    def decompose(self, plan):
+        d_plan = plan.get("decompose", {})
+        if len(d_plan) > 0:
+            return False
+        describe = plan["describe"]
+        if "sleep" not in describe and "bed" not in describe:
+            return True
+        if "睡" not in describe and "床" not in describe:
+            return True
+        if "sleeping" in describe or "asleep" in describe or "in bed" in describe:
+            return False
+        if "睡" in describe or "床" in describe:
+            return False
+        if "sleep" in describe or "bed" in describe:
+            return plan["duration"] <= 60
+        if "睡" in describe or "床" in describe:
+            return plan["duration"] <= 60
+        return True
+
+    def scheduled(self):
+        if not self.daily_schedule:
+            return False
+        return utils.get_timer().daily_format() == self.create.strftime("%A %B %d")
+
+    def to_dict(self):
+        return {
+            "create": (
+                self.create.strftime("%Y%m%d-%H:%M:%S") if self.create else None
+            ),
+            "daily_schedule": self.daily_schedule,
+        }
+
+
+==============================
+File: generative_agents/modules/model/llm_model.py
+==============================
+
+"""generative_agents.model.llm_model"""
+
+import time
+import re
+import requests
+
+
+class LLMModel:
+    def __init__(self, config):
+        self._api_key = config["api_key"]
+        self._base_url = config["base_url"]
+        self._model = config["model"]
+        self._meta_responses = []
+        self._summary = {"total": [0, 0, 0]}
+
+        self._handle = self.setup(config)
+        self._enabled = True
+
+    def setup(self, config):
+        raise NotImplementedError(
+            "setup is not support for " + str(self.__class__)
+        )
+
+    def completion(
+        self,
+        prompt,
+        retry=10,
+        callback=None,
+        failsafe=None,
+        caller="llm_normal",
+        **kwargs
+    ):
+        response, self._meta_responses = None, []
+        self._summary.setdefault(caller, [0, 0, 0])
+        for _ in range(retry):
+            try:
+                meta_response = self._completion(prompt, **kwargs).strip()
+                self._meta_responses.append(meta_response)
+                self._summary["total"][0] += 1
+                self._summary[caller][0] += 1
+                if callback:
+                    response = callback(meta_response)
+                else:
+                    response = meta_response
+            except Exception as e:
+                print(f"LLMModel.completion() caused an error: {e}")
+                time.sleep(5)
+                response = None
+                continue
+            if response is not None:
+                break
+        pos = 2 if response is None else 1
+        self._summary["total"][pos] += 1
+        self._summary[caller][pos] += 1
+        return response or failsafe
+
+    def _completion(self, prompt, **kwargs):
+        raise NotImplementedError(
+            "_completion is not support for " + str(self.__class__)
+        )
+
+    def is_available(self):
+        return self._enabled  # and self._summary["total"][2] <= 10
+
+    def get_summary(self):
+        des = {}
+        for k, v in self._summary.items():
+            des[k] = "S:{},F:{}/R:{}".format(v[1], v[2], v[0])
+        return {"model": self._model, "summary": des}
+
+    def disable(self):
+        self._enabled = False
+
+    @property
+    def meta_responses(self):
+        return self._meta_responses
+
+
+class OpenAILLMModel(LLMModel):
+    def setup(self, config):
+        from openai import OpenAI
+
+        return OpenAI(api_key=self._api_key, base_url=self._base_url)
+
+    def _completion(self, prompt, temperature=0.5):
+        messages = [{"role": "user", "content": prompt}]
+        response = self._handle.chat.completions.create(
+            model=self._model, messages=messages, temperature=temperature
+        )
+        if len(response.choices) > 0:
+            return response.choices[0].message.content
+        return ""
+
+
+class OllamaLLMModel(LLMModel):
+    def setup(self, config):
+        return None
+
+    def ollama_chat(self, messages, temperature):
+        headers = {
+            "Content-Type": "application/json"
+        }
+        params = {
+            "model": self._model,
+            "messages": messages,
+            "temperature": temperature,
+            "stream": False,
+        }
+
+        response = requests.post(
+            url=f"{self._base_url}/chat/completions",
+            headers=headers,
+            json=params,
+            stream=False
+        )
+        return response.json()
+
+    def _completion(self, prompt, temperature=0.5):
+        if "qwen3" in self._model and "\n/nothink" not in prompt:
+            # 针对Qwen3模型禁用think，提高推理速度
+            prompt += "\n/nothink"
+        messages = [{"role": "user", "content": prompt}]
+        response = self.ollama_chat(messages=messages, temperature=temperature)
+        if response and len(response["choices"]) > 0:
+            ret = response["choices"][0]["message"]["content"]
+            # 从输出结果中过滤掉<think>标签内的文字，以免影响后续逻辑
+            return re.sub(r"<think>.*</think>", "", ret, flags=re.DOTALL)
+        return ""
+
+
+def create_llm_model(llm_config):
+    """Create llm model"""
+
+    if llm_config["provider"] == "ollama":
+        return OllamaLLMModel(llm_config)
+
+    elif llm_config["provider"] == "openai":
+        return OpenAILLMModel(llm_config)
+    else:
+        raise NotImplementedError(
+            "llm provider {} is not supported".format(llm_config["provider"])
+        )
+    return None
+
+
+def parse_llm_output(response, patterns, mode="match_last", ignore_empty=False):
+    if isinstance(patterns, str):
+        patterns = [patterns]
+    rets = []
+    for line in response.split("\n"):
+        line = line.replace("**", "").strip()
+        for pattern in patterns:
+            if pattern:
+                matchs = re.findall(pattern, line)
+            else:
+                matchs = [line]
+            if len(matchs) >= 1:
+                rets.append(matchs[0])
+                break
+    if not ignore_empty:
+        assert rets, "Failed to match llm output"
+    if mode == "match_first":
+        return rets[0]
+    if mode == "match_last":
+        return rets[-1]
+    if mode == "match_all":
+        return rets
+    return None
+
+
+==============================
+File: generative_agents/modules/model/__init__.py
+==============================
+
+"""generative_agents.model"""
+
+from .llm_model import *
+
+
+==============================
+File: generative_agents/modules/prompt/scratch.py
+==============================
+
+"""generative_agents.prompt.scratch"""
+
+import random
+import datetime
+import re
+from string import Template
+
+from modules import utils
+from modules.memory import Event
+from modules.model import parse_llm_output
+
+
+class Scratch:
+    def __init__(self, name, currently, config):
+        self.name = name
+        self.currently = currently
+        self.config = config
+        self.template_path = "data/prompts"
+
+    def build_prompt(self, template, data):
+        with open(f"{self.template_path}/{template}.txt", "r", encoding="utf-8") as file:
+            file_content = file.read()
+
+        template = Template(file_content)
+        filled_content = template.substitute(data)
+
+        return filled_content
+
+    def _base_desc(self):
+        return self.build_prompt(
+            "base_desc",
+            {
+                "name": self.name,
+                "age": self.config["age"],
+                "innate": self.config["innate"],
+                "learned": self.config["learned"],
+                "lifestyle": self.config["lifestyle"],
+                "daily_plan": self.config["daily_plan"],
+                "date": utils.get_timer().daily_format_cn(),
+                "currently": self.currently,
+            }
+        )
+
+    def prompt_poignancy_event(self, event):
+        prompt = self.build_prompt(
+            "poignancy_event",
+            {
+                "base_desc": self._base_desc(),
+                "agent": self.name,
+                "event": event.get_describe(),
+            }
+        )
+
+        def _callback(response):
+            pattern = [
+                "评分[:： ]+(\d{1,2})",
+                "(\d{1,2})",
+            ]
+            return int(parse_llm_output(response, pattern, "match_last"))
+
+        return {
+            "prompt": prompt,
+            "callback": _callback,
+            "failsafe": random.choice(list(range(10))) + 1,
+        }
+
+    def prompt_poignancy_chat(self, event):
+        prompt = self.build_prompt(
+            "poignancy_chat",
+            {
+                "base_desc": self._base_desc(),
+                "agent": self.name,
+                "event": event.get_describe(),
+            }
+        )
+
+        def _callback(response):
+            pattern = [
+                "评分[:： ]+(\d{1,2})",
+                "(\d{1,2})",
+            ]
+            return int(parse_llm_output(response, pattern, "match_last"))
+
+        return {
+            "prompt": prompt,
+            "callback": _callback,
+            "failsafe": random.choice(list(range(10))) + 1,
+        }
+
+    def prompt_wake_up(self):
+        prompt = self.build_prompt(
+            "wake_up",
+            {
+                "base_desc": self._base_desc(),
+                "lifestyle": self.config["lifestyle"],
+                "agent": self.name,
+            }
+        )
+
+        def _callback(response):
+            patterns = [
+                "(\d{1,2}):00",
+                "(\d{1,2})",
+                "\d{1,2}",
+            ]
+            wake_up_time = int(parse_llm_output(response, patterns))
+            if wake_up_time > 11:
+                wake_up_time = 11
+            return wake_up_time
+
+        return {"prompt": prompt, "callback": _callback, "failsafe": 6}
+
+    def prompt_schedule_init(self, wake_up):
+        prompt = self.build_prompt(
+            "schedule_init",
+            {
+                "base_desc": self._base_desc(),
+                "lifestyle": self.config["lifestyle"],
+                "agent": self.name,
+                "wake_up": wake_up,
+            }
+        )
+
+        def _callback(response):
+            patterns = [
+                "\d{1,2}\. (.*)。",
+                "\d{1,2}\. (.*)",
+                "\d{1,2}\) (.*)。",
+                "\d{1,2}\) (.*)",
+                "(.*)。",
+                "(.*)",
+            ]
+            return parse_llm_output(response, patterns, mode="match_all")
+
+        failsafe = [
+            "早上6点起床并完成早餐的例行工作",
+            "早上7点吃早餐",
+            "早上8点看书",
+            "中午12点吃午饭",
+            "下午1点小睡一会儿",
+            "晚上7点放松一下，看电视",
+            "晚上11点睡觉",
+        ]
+        return {"prompt": prompt, "callback": _callback, "failsafe": failsafe}
+
+    def prompt_schedule_daily(self, wake_up, daily_schedule):
+        hourly_schedule = ""
+        for i in range(wake_up):
+            hourly_schedule += f"[{i}:00] 睡觉\n"
+        for i in range(wake_up, 24):
+            hourly_schedule += f"[{i}:00] <活动>\n"
+
+        prompt = self.build_prompt(
+            "schedule_daily",
+            {
+                "base_desc": self._base_desc(),
+                "agent": self.name,
+                "daily_schedule": "；".join(daily_schedule),
+                "hourly_schedule": hourly_schedule,
+            }
+        )
+
+        failsafe = {
+            "6:00": "起床并完成早晨的例行工作",
+            "7:00": "吃早餐",
+            "8:00": "读书",
+            "9:00": "读书",
+            "10:00": "读书",
+            "11:00": "读书",
+            "12:00": "吃午饭",
+            "13:00": "小睡一会儿",
+            "14:00": "小睡一会儿",
+            "15:00": "小睡一会儿",
+            "16:00": "继续工作",
+            "17:00": "继续工作",
+            "18:00": "回家",
+            "19:00": "放松，看电视",
+            "20:00": "放松，看电视",
+            "21:00": "睡前看书",
+            "22:00": "准备睡觉",
+            "23:00": "睡觉",
+        }
+
+        def _callback(response):
+            patterns = [
+                "\[(\d{1,2}:\d{2})\] " + self.name + "(.*)。",
+                "\[(\d{1,2}:\d{2})\] " + self.name + "(.*)",
+                "\[(\d{1,2}:\d{2})\] " + "(.*)。",
+                "\[(\d{1,2}:\d{2})\] " + "(.*)",
+            ]
+            outputs = parse_llm_output(response, patterns, mode="match_all")
+            assert len(outputs) >= 5, "less than 5 schedules"
+            return {s[0]: s[1] for s in outputs}
+
+        return {"prompt": prompt, "callback": _callback, "failsafe": failsafe}
+
+    def prompt_schedule_decompose(self, plan, schedule):
+        def _plan_des(plan):
+            start, end = schedule.plan_stamps(plan, time_format="%H:%M")
+            return f'{start} 至 {end}，{self.name} 计划 {plan["describe"]}'
+
+        indices = range(
+            max(plan["idx"] - 1, 0), min(plan["idx"] + 2, len(schedule.daily_schedule))
+        )
+
+        start, end = schedule.plan_stamps(plan, time_format="%H:%M")
+        increment = max(int(plan["duration"] / 100) * 5, 5)
+
+        prompt = self.build_prompt(
+            "schedule_decompose",
+            {
+                "base_desc": self._base_desc(),
+                "agent": self.name,
+                "plan": "；".join([_plan_des(schedule.daily_schedule[i]) for i in indices]),
+                "increment": increment,
+                "start": start,
+                "end": end,
+            }
+        )
+
+        def _callback(response):
+            patterns = [
+                "\d{1,2}\) .*\*计划\* (.*)[\(（]+耗时[:： ]+(\d{1,2})[,， ]+剩余[:： ]+\d*[\)）]",
+            ]
+            schedules = parse_llm_output(response, patterns, mode="match_all")
+            schedules = [(s[0].strip("."), int(s[1])) for s in schedules]
+            left = plan["duration"] - sum([s[1] for s in schedules])
+            if left > 0:
+                schedules.append((plan["describe"], left))
+            return schedules
+
+        failsafe = [(plan["describe"], 10) for _ in range(int(plan["duration"] / 10))]
+        return {"prompt": prompt, "callback": _callback, "failsafe": failsafe}
+
+    def prompt_schedule_revise(self, action, schedule):
+        plan, _ = schedule.current_plan()
+        start, end = schedule.plan_stamps(plan, time_format="%H:%M")
+        act_start_minutes = utils.daily_duration(action.start)
+        original_plan, new_plan = [], []
+
+        def _plan_des(start, end, describe):
+            if not isinstance(start, str):
+                start = start.strftime("%H:%M")
+            if not isinstance(end, str):
+                end = end.strftime("%H:%M")
+            return "[{} 至 {}] {}".format(start, end, describe)
+
+        for de_plan in plan["decompose"]:
+            de_start, de_end = schedule.plan_stamps(de_plan, time_format="%H:%M")
+            original_plan.append(_plan_des(de_start, de_end, de_plan["describe"]))
+            if de_plan["start"] + de_plan["duration"] <= act_start_minutes:
+                new_plan.append(_plan_des(de_start, de_end, de_plan["describe"]))
+            elif de_plan["start"] <= act_start_minutes:
+                new_plan.extend(
+                    [
+                        _plan_des(de_start, action.start, de_plan["describe"]),
+                        _plan_des(
+                            action.start, action.end, action.event.get_describe(False)
+                        ),
+                    ]
+                )
+
+        original_plan, new_plan = "\n".join(original_plan), "\n".join(new_plan)
+
+        prompt = self.build_prompt(
+            "schedule_revise",
+            {
+                "agent": self.name,
+                "start": start,
+                "end": end,
+                "original_plan": original_plan,
+                "duration": action.duration,
+                "event": action.event.get_describe(),
+                "new_plan": new_plan,
+            }
+        )
+
+        def _callback(response):
+            patterns = [
+                "^\[(\d{1,2}:\d{1,2}) ?- ?(\d{1,2}:\d{1,2})\] (.*)",
+                "^\[(\d{1,2}:\d{1,2}) ?~ ?(\d{1,2}:\d{1,2})\] (.*)",
+                "^\[(\d{1,2}:\d{1,2}) ?至 ?(\d{1,2}:\d{1,2})\] (.*)",
+            ]
+            schedules = parse_llm_output(response, patterns, mode="match_all")
+            decompose = []
+            for start, end, describe in schedules:
+                m_start = utils.daily_duration(utils.to_date(start, "%H:%M"))
+                m_end = utils.daily_duration(utils.to_date(end, "%H:%M"))
+                decompose.append(
+                    {
+                        "idx": len(decompose),
+                        "describe": describe,
+                        "start": m_start,
+                        "duration": m_end - m_start,
+                    }
+                )
+            return decompose
+
+        return {"prompt": prompt, "callback": _callback, "failsafe": plan["decompose"]}
+
+    def prompt_determine_sector(self, describes, spatial, address, tile):
+        live_address = spatial.find_address("living_area", as_list=True)[:-1]
+        curr_address = tile.get_address("sector", as_list=True)
+
+        prompt = self.build_prompt(
+            "determine_sector",
+            {
+                "agent": self.name,
+                "live_sector": live_address[-1],
+                "live_arenas": ", ".join(i for i in spatial.get_leaves(live_address)),
+                "current_sector": curr_address[-1],
+                "current_arenas": ", ".join(i for i in spatial.get_leaves(curr_address)),
+                "daily_plan": self.config["daily_plan"],
+                "areas": ", ".join(i for i in spatial.get_leaves(address)),
+                "complete_plan": describes[0],
+                "decomposed_plan": describes[1],
+            }
+        )
+
+        sectors = spatial.get_leaves(address)
+        arenas = {}
+        for sec in sectors:
+            arenas.update(
+                {a: sec for a in spatial.get_leaves(address + [sec]) if a not in arenas}
+            )
+        failsafe = random.choice(sectors)
+
+        def _callback(response):
+            patterns = [
+                ".*应该去[:： ]*(.*)。",
+                ".*应该去[:： ]*(.*)",
+                "(.+)。",
+                "(.+)",
+            ]
+            sector = parse_llm_output(response, patterns)
+            if sector in sectors:
+                return sector
+            if sector in arenas:
+                return arenas[sector]
+            for s in sectors:
+                if sector.startswith(s):
+                    return s
+            return failsafe
+
+        return {"prompt": prompt, "callback": _callback, "failsafe": failsafe}
+
+    def prompt_determine_arena(self, describes, spatial, address):
+        prompt = self.build_prompt(
+            "determine_arena",
+            {
+                "agent": self.name,
+                "target_sector": address[-1],
+                "target_arenas": ", ".join(i for i in spatial.get_leaves(address)),
+                "daily_plan": self.config["daily_plan"],
+                "complete_plan": describes[0],
+                "decomposed_plan": describes[1],
+            }
+        )
+
+        arenas = spatial.get_leaves(address)
+        failsafe = random.choice(arenas)
+
+        def _callback(response):
+            patterns = [
+                ".*应该去[:： ]*(.*)。",
+                ".*应该去[:： ]*(.*)",
+                "(.+)。",
+                "(.+)",
+            ]
+            arena = parse_llm_output(response, patterns)
+            return arena if arena in arenas else failsafe
+
+        return {"prompt": prompt, "callback": _callback, "failsafe": failsafe}
+
+    def prompt_determine_object(self, describes, spatial, address):
+        objects = spatial.get_leaves(address)
+
+        prompt = self.build_prompt(
+            "determine_object",
+            {
+                "activity": describes[1],
+                "objects": ", ".join(objects),
+            }
+        )
+
+        failsafe = random.choice(objects)
+
+        def _callback(response):
+            # pattern = ["The most relevant object from the Objects is: <(.+?)>", "<(.+?)>"]
+            patterns = [
+                ".*是[:： ]*(.*)。",
+                ".*是[:： ]*(.*)",
+                "(.+)。",
+                "(.+)",
+            ]
+            obj = parse_llm_output(response, patterns)
+            return obj if obj in objects else failsafe
+
+        return {"prompt": prompt, "callback": _callback, "failsafe": failsafe}
+
+    def prompt_describe_emoji(self, describe):
+        prompt = self.build_prompt(
+            "describe_emoji",
+            {
+                "action": describe,
+            }
+        )
+
+        def _callback(response):
+            # 正则表达式：匹配大多数emoji
+            emoji_pattern = u"([\U0001F600-\U0001F64F]|"   # 表情符号
+            emoji_pattern += u"[\U0001F300-\U0001F5FF]|"   # 符号和图标
+            emoji_pattern += u"[\U0001F680-\U0001F6FF]|"   # 运输和地图符号
+            emoji_pattern += u"[\U0001F700-\U0001F77F]|"   # 午夜符号
+            emoji_pattern += u"[\U0001F780-\U0001F7FF]|"   # 英镑符号
+            emoji_pattern += u"[\U0001F800-\U0001F8FF]|"   # 合成扩展
+            emoji_pattern += u"[\U0001F900-\U0001F9FF]|"   # 补充符号和图标
+            emoji_pattern += u"[\U0001FA00-\U0001FA6F]|"   # 补充符号和图标
+            emoji_pattern += u"[\U0001FA70-\U0001FAFF]|"   # 补充符号和图标
+            emoji_pattern += u"[\U00002702-\U000027B0]+)"  # 杂项符号
+
+            emoji = re.compile(emoji_pattern, flags=re.UNICODE).findall(response)
+            if len(emoji) > 0:
+                response = "Emoji: " + "".join(i for i in emoji)
+            else:
+                response = ""
+
+            return parse_llm_output(response, ["Emoji: (.*)"])[:3]
+
+        return {"prompt": prompt, "callback": _callback, "failsafe": "💭", "retry": 1}
+
+    def prompt_describe_event(self, subject, describe, address, emoji=None):
+        prompt = self.build_prompt(
+            "describe_event",
+            {
+                "action": describe,
+            }
+        )
+
+        e_describe = describe.replace("(", "").replace(")", "").replace("<", "").replace(">", "")
+        if e_describe.startswith(subject + "此时"):
+            e_describe = e_describe.replace(subject + "此时", "")
+        failsafe = Event(
+            subject, "此时", e_describe, describe=describe, address=address, emoji=emoji
+        )
+
+        def _callback(response):
+            response_list = response.replace(")", ")\n").split("\n")
+            for response in response_list:
+                if len(response.strip()) < 7:
+                    continue
+                if response.count("(") > 1 or response.count(")") > 1 or response.count("（") > 1 or response.count("）") > 1:
+                    continue
+
+                patterns = [
+                    "[\(（]<(.+?)>[,， ]+<(.+?)>[,， ]+<(.*)>[\)）]",
+                    "[\(（](.+?)[,， ]+(.+?)[,， ]+(.*)[\)）]",
+                ]
+                outputs = parse_llm_output(response, patterns)
+                if len(outputs) == 3:
+                    return Event(*outputs, describe=describe, address=address, emoji=emoji)
+
+            return None
+
+        return {"prompt": prompt, "callback": _callback, "failsafe": failsafe}
+
+    def prompt_describe_object(self, obj, describe):
+        prompt = self.build_prompt(
+            "describe_object",
+            {
+                "object": obj,
+                "agent": self.name,
+                "action": describe,
+            }
+        )
+
+        def _callback(response):
+            patterns = [
+                "<" + obj + "> ?" + "(.*)。",
+                "<" + obj + "> ?" + "(.*)",
+            ]
+            return parse_llm_output(response, patterns)
+
+        return {"prompt": prompt, "callback": _callback, "failsafe": "空闲"}
+
+    def prompt_decide_chat(self, agent, other, focus, chats):
+        def _status_des(a):
+            event = a.get_event()
+            if a.path:
+                return f"{a.name} 正去往 {event.get_describe(False)}"
+            return event.get_describe()
+
+        context = "。".join(
+            [c.describe for c in focus["events"]]
+        )
+        context += "\n" + "。".join([c.describe for c in focus["thoughts"]])
+        date_str = utils.get_timer().get_date("%Y-%m-%d %H:%M:%S")
+        chat_history = ""
+        if chats:
+            chat_history = f" {agent.name} 和 {other.name} 上次在 {chats[0].create} 聊过关于 {chats[0].describe} 的话题"
+        a_des, o_des = _status_des(agent), _status_des(other)
+
+        prompt = self.build_prompt(
+            "decide_chat",
+            {
+                "context": context,
+                "date": date_str,
+                "chat_history": chat_history,
+                "agent_status": a_des,
+                "another_status": o_des,
+                "agent": agent.name,
+                "another": other.name,
+            }
+        )
+
+        def _callback(response):
+            if "No" in response or "no" in response or "否" in response or "不" in response:
+                return False
+            return True
+
+        return {"prompt": prompt, "callback": _callback, "failsafe": False}
+
+    def prompt_decide_chat_terminate(self, agent, other, chats):
+        conversation = "\n".join(["{}: {}".format(n, u) for n, u in chats])
+        conversation = (
+            conversation or "[对话尚未开始]"
+        )
+
+        prompt = self.build_prompt(
+            "decide_chat_terminate",
+            {
+                "conversation": conversation,
+                "agent": agent.name,
+                "another": other.name,
+            }
+        )
+
+        def _callback(response):
+            if "No" in response or "no" in response or "否" in response or "不" in response:
+                return False
+            return True
+
+        return {"prompt": prompt, "callback": _callback, "failsafe": False}
+
+    def prompt_decide_wait(self, agent, other, focus):
+        example1 = self.build_prompt(
+            "decide_wait_example",
+            {
+                "context": "简是丽兹的室友。2022-10-25 07:05，简和丽兹互相问候了早上好。",
+                "date": "2022-10-25 07:09",
+                "agent": "简",
+                "another": "丽兹",
+                "status": "简 正要去浴室",
+                "another_status": "丽兹 已经在 使用浴室",
+                "action": "使用浴室",
+                "another_action": "使用浴室",
+                "reason": "推理：简和丽兹都想用浴室。简和丽兹同时使用浴室会很奇怪。所以，既然丽兹已经在用浴室了，对简来说最好的选择就是等着用浴室。\n",
+                "answer": "答案：<选项A>",
+            }
+        )
+        example2 = self.build_prompt(
+            "decide_wait_example",
+            {
+                "context": "山姆是莎拉的朋友。2022-10-24 23:00，山姆和莎拉就最喜欢的电影进行了交谈。",
+                "date": "2022-10-25 12:40",
+                "agent": "山姆",
+                "another": "莎拉",
+                "status": "山姆 正要去吃午饭",
+                "another_status": "莎拉 已经在 洗衣服",
+                "action": "吃午饭",
+                "another_action": "洗衣服",
+                "reason": "推理：山姆可能会在餐厅吃午饭。莎拉可能会去洗衣房洗衣服。由于山姆和莎拉需要使用不同的区域，他们的行为并不冲突。所以，由于山姆和莎拉将在不同的区域，山姆现在继续吃午饭。\n",
+                "answer": "答案：<选项B>",
+            }
+        )
+
+        def _status_des(a):
+            event, loc = a.get_event(), ""
+            if event.address:
+                loc = " 在 {} 的 {}".format(event.address[-2], event.address[-1])
+            if not a.path:
+                return f"{a.name} 已经在 {event.get_describe(False)}{loc}"
+            return f"{a.name} 正要去 {event.get_describe(False)}{loc}"
+
+        context = ". ".join(
+            [c.describe for c in focus["events"]]
+        )
+        context += "\n" + ". ".join([c.describe for c in focus["thoughts"]])
+
+        task = self.build_prompt(
+            "decide_wait_example",
+            {
+                "context": context,
+                "date": utils.get_timer().get_date("%Y-%m-%d %H:%M"),
+                "agent": agent.name,
+                "another": other.name,
+                "status": _status_des(agent),
+                "another_status": _status_des(other),
+                "action": agent.get_event().get_describe(False),
+                "another_action": other.get_event().get_describe(False),
+                "reason": "",
+                "answer": "",
+            }
+        )
+
+        prompt = self.build_prompt(
+            "decide_wait",
+            {
+                "examples_1": example1,
+                "examples_2": example2,
+                "task": task,
+            }
+        )
+
+        def _callback(response):
+            return "A" in response
+
+        return {"prompt": prompt, "callback": _callback, "failsafe": False}
+
+    def prompt_summarize_relation(self, agent, other_name):
+        nodes = agent.associate.retrieve_focus([other_name], 50)
+
+        prompt = self.build_prompt(
+            "summarize_relation",
+            {
+                "context": "\n".join(["{}. {}".format(idx, n.describe) for idx, n in enumerate(nodes)]),
+                "agent": agent.name,
+                "another": other_name,
+            }
+        )
+
+        def _callback(response):
+            return response
+
+        return {
+            "prompt": prompt,
+            "callback": _callback,
+            "failsafe": agent.name + " 正在看着 " + other_name,
+        }
+
+    def prompt_generate_chat(self, agent, other, relation, chats):
+        focus = [relation, other.get_event().get_describe()]
+        if len(chats) > 4:
+            focus.append("; ".join("{}: {}".format(n, t) for n, t in chats[-4:]))
+        nodes = agent.associate.retrieve_focus(focus, 15)
+        memory = "\n- " + "\n- ".join([n.describe for n in nodes])
+        chat_nodes = agent.associate.retrieve_chats(other.name)
+        pass_context = ""
+        for n in chat_nodes:
+            delta = utils.get_timer().get_delta(n.create)
+            if delta > 480:
+                continue
+            pass_context += f"{delta} 分钟前，{agent.name} 和 {other.name} 进行过对话。{n.describe}\n"
+
+        address = agent.get_tile().get_address()
+        if len(pass_context) > 0:
+            prev_context = f'\n背景：\n"""\n{pass_context}"""\n\n'
+        else:
+            prev_context = ""
+        curr_context = (
+            f"{agent.name} {agent.get_event().get_describe(False)} 时，看到 {other.name} {other.get_event().get_describe(False)}。"
+        )
+
+        conversation = "\n".join(["{}: {}".format(n, u) for n, u in chats])
+        conversation = (
+            conversation or "[对话尚未开始]"
+        )
+
+        prompt = self.build_prompt(
+            "generate_chat",
+            {
+                "agent": agent.name,
+                "base_desc": self._base_desc(),
+                "memory": memory,
+                "address": f"{address[-2]}，{address[-1]}",
+                "current_time": utils.get_timer().get_date("%H:%M"),
+                "previous_context": prev_context,
+                "current_context": curr_context,
+                "another": other.name,
+                "conversation": conversation,
+            }
+        )
+
+        def _callback(response):
+            assert "{" in response and "}" in response
+            json_content = utils.load_dict(
+                "{" + response.split("{")[1].split("}")[0] + "}"
+            )
+            text = json_content[agent.name].replace("\n\n", "\n").strip(" \n\"'“”‘’")
+            return text
+
+        return {
+            "prompt": prompt,
+            "callback": _callback,
+            "failsafe": "嗯",
+        }
+
+    def prompt_generate_chat_check_repeat(self, agent, chats, content):
+        conversation = "\n".join(["{}: {}".format(n, u) for n, u in chats])
+        conversation = (
+                conversation or "[对话尚未开始]"
+        )
+
+        prompt = self.build_prompt(
+            "generate_chat_check_repeat",
+            {
+                "conversation": conversation,
+                "content": f"{agent.name}: {content}",
+                "agent": agent.name,
+            }
+        )
+
+        def _callback(response):
+            if "No" in response or "no" in response or "否" in response or "不" in response:
+                return False
+            return True
+
+        return {"prompt": prompt, "callback": _callback, "failsafe": False}
+
+    def prompt_summarize_chats(self, chats):
+        conversation = "\n".join(["{}: {}".format(n, u) for n, u in chats])
+
+        prompt = self.build_prompt(
+            "summarize_chats",
+            {
+                "conversation": conversation,
+            }
+        )
+
+        def _callback(response):
+            return response.strip()
+
+        if len(chats) > 1:
+            failsafe = "{} 和 {} 之间的普通对话".format(chats[0][0], chats[1][0])
+        else:
+            failsafe = "{} 说的话没有得到回应".format(chats[0][0])
+
+        return {
+            "prompt": prompt,
+            "callback": _callback,
+            "failsafe": failsafe,
+        }
+
+    def prompt_reflect_focus(self, nodes, topk):
+        prompt = self.build_prompt(
+            "reflect_focus",
+            {
+                "reference": "\n".join(["{}. {}".format(idx, n.describe) for idx, n in enumerate(nodes)]),
+                "number": topk,
+            }
+        )
+
+        def _callback(response):
+            pattern = ["^\d{1}\. (.*)", "^\d{1}\) (.*)", "^\d{1} (.*)"]
+            return parse_llm_output(response, pattern, mode="match_all")
+
+        return {
+            "prompt": prompt,
+            "callback": _callback,
+            "failsafe": [
+                "{} 是谁？".format(self.name),
+                "{} 住在哪里？".format(self.name),
+                "{} 今天要做什么？".format(self.name),
+            ],
+        }
+
+    def prompt_reflect_insights(self, nodes, topk):
+        prompt = self.build_prompt(
+            "reflect_insights",
+            {
+                "reference": "\n".join(["{}. {}".format(idx, n.describe) for idx, n in enumerate(nodes)]),
+                "number": topk,
+            }
+        )
+
+        def _callback(response):
+            patterns = [
+                "^\d{1}[\. ]+(.*)[。 ]*[\(（]+.*序号[:： ]+([\d,， ]+)[\)）]",
+                "^\d{1}[\. ]+(.*)[。 ]*[\(（]([\d,， ]+)[\)）]",
+            ]
+            insights, outputs = [], parse_llm_output(
+                response, patterns, mode="match_all"
+            )
+            if outputs:
+                for output in outputs:
+                    if isinstance(output, str):
+                        insight, node_ids = output, []
+                    elif len(output) == 2:
+                        insight, reason = output
+                        indices = [int(e.strip()) for e in reason.split(",")]
+                        node_ids = [nodes[i].node_id for i in indices if i < len(nodes)]
+                    insights.append([insight.strip(), node_ids])
+                return insights
+            raise Exception("Can not find insights")
+
+        return {
+            "prompt": prompt,
+            "callback": _callback,
+            "failsafe": [
+                [
+                    "{} 在考虑下一步该做什么".format(self.name),
+                    [nodes[0].node_id],
+                ]
+            ],
+        }
+
+    def prompt_reflect_chat_planing(self, chats):
+        all_chats = "\n".join(["{}: {}".format(n, c) for n, c in chats])
+
+        prompt = self.build_prompt(
+            "reflect_chat_planing",
+            {
+                "conversation": all_chats,
+                "agent": self.name,
+            }
+        )
+
+        def _callback(response):
+            return response
+
+        return {
+            "prompt": prompt,
+            "callback": _callback,
+            "failsafe": f"{self.name} 进行了一次对话",
+        }
+
+    def prompt_reflect_chat_memory(self, chats):
+        all_chats = "\n".join(["{}: {}".format(n, c) for n, c in chats])
+
+        prompt = self.build_prompt(
+            "reflect_chat_memory",
+            {
+                "conversation": all_chats,
+                "agent": self.name,
+            }
+        )
+
+        def _callback(response):
+            return response
+
+        return {
+            "prompt": prompt,
+            "callback": _callback,
+            # "failsafe": f"{self.name} had a sonversation",
+            "failsafe": f"{self.name} 进行了一次对话",
+        }
+
+    def prompt_retrieve_plan(self, nodes):
+        statements = [
+            n.create.strftime("%Y-%m-%d %H:%M") + ": " + n.describe for n in nodes
+        ]
+
+        prompt = self.build_prompt(
+            "retrieve_plan",
+            {
+                "description": "\n".join(statements),
+                "agent": self.name,
+                "date": utils.get_timer().get_date("%Y-%m-%d"),
+            }
+        )
+
+        def _callback(response):
+            pattern = [
+                "^\d{1,2}\. (.*)。",
+                "^\d{1,2}\. (.*)",
+                "^\d{1,2}\) (.*)。",
+                "^\d{1,2}\) (.*)",
+            ]
+            return parse_llm_output(response, pattern, mode="match_all")
+
+        return {
+            "prompt": prompt,
+            "callback": _callback,
+            "failsafe": [r.describe for r in random.choices(nodes, k=5)],
+        }
+
+    def prompt_retrieve_thought(self, nodes):
+        statements = [
+            n.create.strftime("%Y-%m-%d %H:%M") + "：" + n.describe for n in nodes
+        ]
+
+        prompt = self.build_prompt(
+            "retrieve_thought",
+            {
+                "description": "\n".join(statements),
+                "agent": self.name,
+            }
+        )
+
+        def _callback(response):
+            return response
+
+        return {
+            "prompt": prompt,
+            "callback": _callback,
+            "failsafe": "{} 应该遵循昨天的日程".format(self.name),
+        }
+
+    def prompt_retrieve_currently(self, plan_note, thought_note):
+        time_stamp = (
+            utils.get_timer().get_date() - datetime.timedelta(days=1)
+        ).strftime("%Y-%m-%d")
+
+        prompt = self.build_prompt(
+            "retrieve_currently",
+            {
+                "agent": self.name,
+                "time": time_stamp,
+                "currently": self.currently,
+                "plan": ". ".join(plan_note),
+                "thought": thought_note,
+                "current_time": utils.get_timer().get_date("%Y-%m-%d"),
+            }
+        )
+
+        def _callback(response):
+            pattern = [
+                "^状态: (.*)。",
+                "^状态: (.*)",
+            ]
+            return parse_llm_output(response, pattern)
+
+        return {
+            "prompt": prompt,
+            "callback": _callback,
+            "failsafe": self.currently,
+        }
+
+
+==============================
+File: generative_agents/modules/prompt/__init__.py
+==============================
+
+"""generative_agents.prompt"""
+
+from .scratch import *
+
+
+==============================
+File: generative_agents/modules/utils/timer.py
+==============================
+
+"""generative_agents.utils.timer"""
+
+import datetime
+
+from .namespace import GenerativeAgentsMap, GenerativeAgentsKey
+
+
+def to_date(date_str, date_format="%Y%m%d-%H:%M:%S"):
+    if date_format == "%H:%M" and date_str.startswith("24:"):
+        date_str = date_str.replace("24:", "0:")
+    return datetime.datetime.strptime(date_str, date_format)
+
+
+def daily_duration(date, mode="minute"):
+    duration = date.hour % 24
+    if mode == "hour":
+        return duration
+    duration = duration * 60 + date.minute
+    if mode == "minute":
+        return duration
+    return datetime.timedelta(minutes=duration)
+
+
+class Timer:
+    def __init__(self, start=None):
+        self._mode = "on_time"
+        if start:
+            d_format = "%Y%m%d-%H:%M" if "-" in start else "%H:%M"
+            self._offset = to_date(start, d_format)
+        else:
+            self._offset = datetime.datetime.now()
+
+    def forward(self, offset):
+        self._offset += datetime.timedelta(minutes=offset)
+
+    def get_date(self, date_format=""):
+        date = self._offset
+        if date_format:
+            return date.strftime(date_format)
+        return date
+
+    def get_delta(self, start, end=None, mode="minute"):
+        end = end or self.get_date()
+        seconds = (end - start).total_seconds()
+        if mode == "second":
+            return seconds
+        if mode == "minute":
+            return round(seconds / 60)
+        if mode == "hour":
+            return round(seconds / 3600)
+        return end - start
+
+    def daily_format(self):
+        return self.get_date("%A %B %d")
+
+    def get_weekday(self, t):
+        weekday_dict = {
+            0: "星期一",
+            1: "星期二",
+            2: "星期三",
+            3: "星期四",
+            4: "星期五",
+            5: "星期六",
+            6: "星期日"
+        }
+        weekday = weekday_dict[t.weekday()]
+        return weekday
+
+    def daily_format_cn(self):
+        weekday = self.get_weekday(self.get_date())
+        date = self.get_date("%Y年%m月%d日")
+        return f"{date}（{weekday}）"
+
+    def time_format_cn(self, t):
+        weekday = self.get_weekday(t)
+        date = t.strftime("%Y年%m月%d日")
+        time = t.strftime("%H:%M")
+        return f"{date}（{weekday}）{time}"
+
+    def daily_duration(self, mode="minute"):
+        return daily_duration(self.get_date(), mode)
+
+    def daily_time(self, duration):
+        base = self.get_date().replace(hour=0, minute=0, second=0, microsecond=0)
+        return base + datetime.timedelta(minutes=duration)
+
+    @property
+    def mode(self):
+        return self._mode
+
+
+def set_timer(start=None):
+    GenerativeAgentsMap.set(GenerativeAgentsKey.TIMER, Timer(start=start))
+    return GenerativeAgentsMap.get(GenerativeAgentsKey.TIMER)
+
+
+def get_timer():
+    if not GenerativeAgentsMap.get(GenerativeAgentsKey.TIMER):
+        set_timer()
+    return GenerativeAgentsMap.get(GenerativeAgentsKey.TIMER)
+
+
+==============================
+File: generative_agents/modules/utils/log.py
+==============================
+
+"""generative_agents.utils.log"""
+
+import os
+import logging
+from typing import Union
+
+from .timer import get_timer
+from .arguments import dump_dict
+
+
+class IOLogger(object):
+    """IO Logger for MSC"""
+
+    def __init__(self, level=logging.INFO, color=False):
+        self._printers = {
+            "red": (lambda m: print("\033[91m {}\033[00m".format(m))),
+            "green": (lambda m: print("\033[92m {}\033[00m".format(m))),
+            "yellow": (lambda m: print("\033[93m {}\033[00m".format(m))),
+            "purple": (lambda m: print("\033[95m {}\033[00m".format(m))),
+            "cyan": (lambda m: print("\033[96m {}\033[00m".format(m))),
+            "gray": (lambda m: print("\033[97m {}\033[00m".format(m))),
+            "black": (lambda m: print("\033[98m {}\033[00m".format(m))),
+        }
+        self._level = level
+        self._color = color
+
+    def _get_printer(self, color):
+        if not self._color:
+            return print
+        if color not in self._printers:
+            return print
+        return self._printers.get(color, print)
+
+    def _prefix(self):
+        return "<{}({})>".format(
+            get_timer().get_date("%Y%m%d-%H:%M:%S"), get_timer().mode
+        )
+
+    def info(self, msg):
+        if self._level <= logging.INFO:
+            self._get_printer("green")("[INFO]{}: {}".format(self._prefix(), msg))
+
+    def debug(self, msg):
+        if self._level <= logging.DEBUG:
+            self._get_printer("green")("[DEBUG]{}: {}".format(self._prefix(), msg))
+
+    def warning(self, msg):
+        if self._level >= logging.WARN:
+            self._get_printer("yellow")("[WARNING]{}: {}".format(self._prefix(), msg))
+
+    def error(self, msg):
+        self._get_printer("red")("[ERROR]{}: {}".format(self._prefix(), msg))
+        raise Exception(msg)
+
+
+def create_io_logger(level: Union[str, int] = logging.INFO):
+    if isinstance(level, str):
+        if level.startswith("debug"):
+            level = logging.DEBUG
+        elif level == "info":
+            level = logging.INFO
+        elif level == "warn":
+            level = logging.WARN
+        elif level == "error":
+            level = logging.ERROR
+        elif level == "critical":
+            level = logging.CRITICAL
+        else:
+            raise Exception("Unexcept verbose {}, should be debug| info| warn")
+    return IOLogger(level)
+
+
+def create_file_logger(
+    path: str, level: Union[str, int] = logging.INFO
+) -> logging.Logger:
+    """Create file logger
+
+    Parameters
+    ----------
+    level: logging level
+        The logging level.
+    path: str
+        The file path.
+
+    Returns
+    -------
+    logger: logging.Logger
+        The logger.
+    """
+
+    if isinstance(level, str):
+        if level.startswith("debug"):
+            level = logging.DEBUG
+        elif level == "info":
+            level = logging.INFO
+        elif level == "warn":
+            level = logging.WARN
+        elif level == "error":
+            level = logging.ERROR
+        elif level == "critical":
+            level = logging.CRITICAL
+        else:
+            raise Exception("Unexcept verbose {}, should be debug| info| warn")
+
+    log_name = os.path.basename(path)
+    logger = logging.getLogger(log_name)
+    logger.setLevel(level)
+    if any(
+        isinstance(h, logging.FileHandler) and h.baseFilename == path
+        for h in logger.handlers
+    ):
+        return logger
+    formatter = logging.Formatter(
+        "%(asctime)s %(filename)s[ln:%(lineno)d]<%(levelname)s> %(message)s"
+    )
+    handlers = [
+        logging.FileHandler(path, mode="a", encoding=None, delay=False),
+        logging.StreamHandler(),
+    ]
+    for handler in handlers:
+        handler.setLevel(level)
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+    return logger
+
+
+def split_line(title, symbol="-", width=80):
+    return "{0}{1}{0}".format(symbol * 10, title.center(width - 20))
+
+
+def block_msg(title, msg, symbol="-", width=80):
+    if isinstance(msg, dict):
+        msg = dump_dict(msg)
+    return "\n{}\n{}".format(split_line(title, symbol, width), msg)
+
+
+==============================
+File: generative_agents/modules/utils/namespace.py
+==============================
+
+"""generative_agents.utils.namespace"""
+
+from typing import Any, Optional
+import copy
+
+
+class GenerativeAgentsMap:
+    """Global Namespace map for Land"""
+
+    MAP = {}
+
+    @classmethod
+    def set(cls, key: str, value: Any):
+        cls.MAP[key] = value
+
+    @classmethod
+    def get(cls, key: str, default: Optional[Any] = None):
+        return cls.MAP.get(key, default)
+
+    @classmethod
+    def clone(cls, key: str, default: Optional[Any] = None):
+        return copy.deepcopy(cls.get(key, default))
+
+    @classmethod
+    def delete(cls, key: str):
+        if key in cls.MAP:
+            return cls.MAP.pop(key)
+        return None
+
+    @classmethod
+    def contains(cls, key: str):
+        return key in cls.MAP
+
+    @classmethod
+    def reset(cls):
+        cls.MAP = {}
+
+
+class GenerativeAgentsKey:
+    """Keys for the LandMap"""
+
+    GAME = "game"
+    TIMER = "timer"
+    MODELS = "models"
+
+
+==============================
+File: generative_agents/modules/utils/arguments.py
+==============================
+
+"""generative_agents.utils.arguments"""
+
+import os
+import json
+import copy
+from typing import Any
+
+
+def load_dict(str_dict: str, flavor: str = "json") -> dict:
+    """Load the string/file to dict.
+
+    Parameters
+    ----------
+    str_dict: string
+        The file_path or string object.
+    flavor: str
+        The flavor for load.
+
+    Returns
+    -------
+    dict_obj: dict
+        The loaded dict.
+    """
+
+    if not str_dict:
+        return {}
+    if isinstance(str_dict, str) and os.path.isfile(str_dict):
+        with open(str_dict, "r", encoding="utf-8") as f:
+            dict_obj = json.load(f)
+    elif isinstance(str_dict, str):
+        dict_obj = json.loads(str_dict)
+    elif isinstance(str_dict, dict):
+        dict_obj = copy_dict(str_dict)
+    else:
+        raise Exception("Unexpected str_dict {}({})".format(str_dict, type(str_dict)))
+    assert flavor == "json", "Unexpected flavor for load_dict: " + str(flavor)
+    return dict_obj
+
+
+def save_dict(dict_obj: Any, path: str, indent: int = 2) -> str:
+    """Save dict object
+
+    Parameters
+    ----------
+    dict_obj:
+        The object that can be load as dict.
+    path: str
+        The output path.
+    indent: int
+        The indent
+
+    Returns
+    -------
+    path: str
+        The output path.
+    """
+
+    with open(path, "w") as f:
+        f.write(json.dumps(load_dict(dict_obj), indent=indent, ensure_ascii=False))
+    return path
+
+
+def update_dict(src_dict: dict, new_dict: dict, soft_update: bool = False) -> dict:
+    """Update src_dict with new_dict.
+
+    Parameters
+    ----------
+    src_dict: dict
+        The source dict.
+    new_dict: dict
+        The new dict.
+    soft_update: bool
+        Whether to update the source dict, False to force update.
+
+    Returns
+    -------
+    dict_obj: dict
+        The updated dict.
+    """
+
+    if not src_dict:
+        return new_dict
+    if not new_dict:
+        return src_dict
+    assert isinstance(src_dict, dict) and isinstance(
+        new_dict, dict
+    ), "update_dict only support dict, get src {} and new {}".format(
+        type(src_dict), type(new_dict)
+    )
+    for k, v in new_dict.items():
+        if not src_dict.get(k):
+            src_dict[k] = v
+        elif isinstance(v, dict):
+            v = update_dict(src_dict.get(k, {}), v, soft_update)
+            src_dict[k] = v
+        elif not soft_update:
+            src_dict[k] = v
+    return src_dict
+
+
+def dump_dict(dict_obj: dict, flavor: str = "table:2") -> str:
+    """Dump the config to string.
+
+    Parameters
+    ----------
+    src_dict: dict
+        The source dict.
+    flavor: str
+        The flavor for dumps.
+
+    Returns
+    -------
+    str_dict: string
+        The dumped string.
+    """
+
+    if not dict_obj:
+        return ""
+    if flavor.startswith("table:"):
+
+        def _get_lines(value, indent=0):
+            max_size = int(flavor.split(":")[1]) - indent - 2
+            lines = []
+            for k, v in value.items():
+                if v is None:
+                    continue
+                if isinstance(v, (dict, tuple, list, set)) and not v:
+                    continue
+                if isinstance(v, dict) and len(str(k) + str(v)) > max_size:
+                    lines.append("{}{}:".format(indent * " ", k))
+                    lines.extend(_get_lines(v, indent + 2))
+                elif (
+                    isinstance(v, (tuple, list, set))
+                    and len(str(k) + str(v)) > max_size
+                ):
+                    lines.append("{}{}:".format(indent * " ", k))
+                    for idx, ele in enumerate(v):
+                        if isinstance(ele, dict) and len(str(ele)) > max_size:
+                            lines.append(
+                                "{}[{}.{}]:".format((indent + 2) * " ", k, idx)
+                            )
+                            lines.extend(_get_lines(ele, indent + 4))
+                        else:
+                            lines.append(
+                                "{}<{}>{}".format((indent + 2) * " ", idx, ele)
+                            )
+                elif isinstance(v, bool):
+                    lines.append(
+                        "{}{}: {}".format(indent * " ", k, "true" if v else "false")
+                    )
+                elif hasattr(v, "__name__"):
+                    lines.append(
+                        "{}{}: {}({})".format(indent * " ", k, v.__name__, type(v))
+                    )
+                else:
+                    lines.append("{}{}: {}".format(indent * " ", k, v))
+            return lines
+
+        lines = _get_lines(dict_obj) or [
+            "  {}: {}".format(k, v) for k, v in dict_obj.items()
+        ]
+        return "\n".join(lines)
+    return json.dumps(dict_obj, ensure_ascii=False)
+
+
+def dict_equal(dict_a: dict, dict_b: dict) -> bool:
+    """Check if two dicts are the same.
+
+    Parameters
+    ----------
+    dict_a: dict
+        The A dict.
+    dict_b: dict
+        The B dict.
+
+    Returns
+    -------
+    equal: bool
+        Whether two dicts are the same.
+    """
+
+    if not isinstance(dict_a, dict) or not isinstance(dict_b, dict):
+        return False
+    if dict_a.keys() != dict_b.keys():
+        return False
+    for k, v in dict_a.items():
+        if not isinstance(v, type(dict_b[k])):
+            return False
+        if isinstance(v, dict) and not dict_equal(v, dict_b[k]):
+            return False
+        if v != dict_b[k]:
+            return False
+    return True
+
+
+def copy_dict(dict_obj: dict) -> dict:
+    """Deepcopy dict object
+
+    Parameters
+    ----------
+    dict_obj: dict
+        The source dict.
+
+    Returns
+    -------
+    dict_obj: dict
+        The copied dict.
+    """
+
+    if not dict_obj:
+        return {}
+    try:
+        return copy.deepcopy(dict_obj)
+    except:  # pylint: disable=bare-except
+        new_dict = {}
+        for k, v in dict_obj.items():
+            if isinstance(v, (list, tuple)):
+                new_dict[k] = [copy_dict(e) for e in v]
+            elif isinstance(v, dict):
+                new_dict[k] = copy_dict(v)
+            else:
+                new_dict[k] = v
+        return new_dict
+
+
+def map_dict(dict_obj: dict, mapper: callable) -> dict:
+    """Apply mapper to dict object
+
+    Parameters
+    ----------
+    dict_obj: dict
+        The source dict.
+    mapper: callable
+        The mapper function.
+
+    Returns
+    -------
+    new_dict: dict
+        The mapped dict.
+    """
+
+    if not dict_obj:
+        return {}
+    new_dict = {}
+    for k, v in dict_obj.items():
+        if isinstance(v, (tuple, list)):
+            new_dict[k] = [
+                map_dict(mapper(e), mapper) if isinstance(e, dict) else mapper(e)
+                for e in v
+            ]
+        elif isinstance(v, dict):
+            new_dict[k] = map_dict(mapper(v), mapper)
+        else:
+            new_dict[k] = mapper(v)
+    return new_dict
+
+
+==============================
+File: generative_agents/modules/utils/__init__.py
+==============================
+
+"""generative_agents.utils"""
+
+from .arguments import *
+from .log import *
+from .namespace import *
+from .timer import *
+
+
