@@ -11,7 +11,7 @@ class Spatial:
         self.address = address or {}
         if "sleeping" not in self.address and "睡觉" not in self.address and "living_area" in self.address:
             # self.address["sleeping"] = self.address["living_area"] + ["bed"]
-            self.address["睡觉"] = self.address["living_area"] + ["床"]
+            self.address["睡觉"] = self.address["living_area"] + ["ベッド"]
 
     def __str__(self):
         return utils.dump_dict(self.tree)

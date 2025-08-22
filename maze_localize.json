@@ -1,0 +1,402 @@
+[
+    {
+      "chinese": "主人房",
+      "japanese": "主寝室"
+    },
+    {
+      "chinese": "举重器械",
+      "japanese": "ウェイト器具"
+    },
+    {
+      "chinese": "乔治的公寓",
+      "japanese": "じょうじのアパート"
+    },
+    {
+      "chinese": "书架",
+      "japanese": "本棚"
+    },
+    {
+      "chinese": "书桌",
+      "japanese": "机"
+    },
+    {
+      "chinese": "亚当的家",
+      "japanese": "あきらの家"
+    },
+    {
+      "chinese": "亚瑟的公寓",
+      "japanese": "あつしのアパート"
+    },
+    {
+      "chinese": "伊莎贝拉的公寓",
+      "japanese": "いずみのアパート"
+    },
+    {
+      "chinese": "住宅花园",
+      "japanese": "住宅の庭"
+    },
+    {
+      "chinese": "供应店",
+      "japanese": "供給店"
+    },
+    {
+      "chinese": "供应店产品货架",
+      "japanese": "供給店製品棚"
+    },
+    {
+      "chinese": "供应店柜台",
+      "japanese": "供給店カウンター"
+    },
+    {
+      "chinese": "供应店柜台后面",
+      "japanese": "供給店カウンターの後ろ"
+    },
+    {
+      "chinese": "克劳斯的房间",
+      "japanese": "けんじの部屋"
+    },
+    {
+      "chinese": "公共休息室",
+      "japanese": "コモンルーム"
+    },
+    {
+      "chinese": "公共休息室桌子",
+      "japanese": "コモンルームのテーブル"
+    },
+    {
+      "chinese": "公共休息室沙发",
+      "japanese": "コモンルームのソファ"
+    },
+    {
+      "chinese": "公园",
+      "japanese": "公園"
+    },
+    {
+      "chinese": "公园花园",
+      "japanese": "公園の庭"
+    },
+    {
+      "chinese": "冰箱",
+      "japanese": "冷蔵庫"
+    },
+    {
+      "chinese": "卡洛斯的公寓",
+      "japanese": "かずやのアパート"
+    },
+    {
+      "chinese": "卡门的房间",
+      "japanese": "かれんの部屋"
+    },
+    {
+      "chinese": "厕所",
+      "japanese": "トイレ"
+    },
+    {
+      "chinese": "厨房",
+      "japanese": "キッチン"
+    },
+    {
+      "chinese": "厨房水槽",
+      "japanese": "キッチンのシンク"
+    },
+    {
+      "chinese": "台球桌",
+      "japanese": "ビリヤード台"
+    },
+    {
+      "chinese": "吉他",
+      "japanese": "ギター"
+    },
+    {
+      "chinese": "吧台后面",
+      "japanese": "バーカウンターの後ろ"
+    },
+    {
+      "chinese": "咖啡馆",
+      "japanese": "カフェ"
+    },
+    {
+      "chinese": "咖啡馆柜台后面",
+      "japanese": "カフェカウンターの後ろ"
+    },
+    {
+      "chinese": "咖啡馆顾客座位",
+      "japanese": "カフェの客席"
+    },
+    {
+      "chinese": "哈维奥克供应店",
+      "japanese": "ハーヴィオーク供給店"
+    },
+    {
+      "chinese": "商店",
+      "japanese": "店"
+    },
+    {
+      "chinese": "图书馆",
+      "japanese": "図書館"
+    },
+    {
+      "chinese": "图书馆桌子",
+      "japanese": "図書館のテーブル"
+    },
+    {
+      "chinese": "图书馆沙发",
+      "japanese": "図書館のソファ"
+    },
+    {
+      "chinese": "埃迪的卧室",
+      "japanese": "えいじの寝室"
+    },
+    {
+      "chinese": "塔玛拉和卡门的家",
+      "japanese": "たまきとかれんの家"
+    },
+    {
+      "chinese": "塔玛拉的房间",
+      "japanese": "たまきの部屋"
+    },
+    {
+      "chinese": "壁橱",
+      "japanese": "クローゼット"
+    },
+    {
+      "chinese": "奥克山学院",
+      "japanese": "オークヒル学院"
+    },
+    {
+      "chinese": "奥克山学院宿舍",
+      "japanese": "オークヒル学院寮"
+    },
+    {
+      "chinese": "女卫生间",
+      "japanese": "女子トイレ"
+    },
+    {
+      "chinese": "宿舍花园",
+      "japanese": "寮の庭"
+    },
+    {
+      "chinese": "山本百合子的房子",
+      "japanese": "ゆりこの家"
+    },
+    {
+      "chinese": "床",
+      "japanese": "ベッド"
+    },
+    {
+      "chinese": "弗朗西斯科的房间",
+      "japanese": "ふくだの部屋"
+    },
+    {
+      "chinese": "弗朗西斯科的浴室",
+      "japanese": "ふくだの浴室"
+    },
+    {
+      "chinese": "拉吉夫的房间",
+      "japanese": "りょうたの部屋"
+    },
+    {
+      "chinese": "拉吉夫的浴室",
+      "japanese": "りょうたの浴室"
+    },
+    {
+      "chinese": "拉托亚的房间",
+      "japanese": "れいなの部屋"
+    },
+    {
+      "chinese": "拉托亚的浴室",
+      "japanese": "れいなの浴室"
+    },
+    {
+      "chinese": "摩尔家族的房子",
+      "japanese": "ムーア家の家"
+    },
+    {
+      "chinese": "教室",
+      "japanese": "教室"
+    },
+    {
+      "chinese": "教室学生座位",
+      "japanese": "教室の生徒の席"
+    },
+    {
+      "chinese": "教室讲台",
+      "japanese": "教室の教壇"
+    },
+    {
+      "chinese": "杂货店柜台",
+      "japanese": "雑貨店カウンター"
+    },
+    {
+      "chinese": "杂货店柜台后面",
+      "japanese": "雑貨店カウンターの後ろ"
+    },
+    {
+      "chinese": "杂货店货架",
+      "japanese": "雑貨店の棚"
+    },
+    {
+      "chinese": "林氏家族的房子",
+      "japanese": "林家の家"
+    },
+    {
+      "chinese": "架子",
+      "japanese": "棚"
+    },
+    {
+      "chinese": "柳树市场和药店",
+      "japanese": "柳市場と薬局"
+    },
+    {
+      "chinese": "梅和约翰的卧室",
+      "japanese": "みどりとひろしの寝室"
+    },
+    {
+      "chinese": "汤姆和简的卧室",
+      "japanese": "ともきとさくらの寝室"
+    },
+    {
+      "chinese": "沃尔夫冈的房间",
+      "japanese": "たくみの部屋"
+    },
+    {
+      "chinese": "浴室",
+      "japanese": "浴室"
+    },
+    {
+      "chinese": "浴室洗手池",
+      "japanese": "浴室の洗面台"
+    },
+    {
+      "chinese": "海莉的房间",
+      "japanese": "はるかの部屋"
+    },
+    {
+      "chinese": "海莉的浴室",
+      "japanese": "はるかの浴室"
+    },
+    {
+      "chinese": "游戏机",
+      "japanese": "ゲーム機"
+    },
+    {
+      "chinese": "烤箱",
+      "japanese": "オーブン"
+    },
+    {
+      "chinese": "烹饪区",
+      "japanese": "調理エリア"
+    },
+    {
+      "chinese": "玛丽亚的房间",
+      "japanese": "まりあの部屋"
+    },
+    {
+      "chinese": "玫瑰酒吧",
+      "japanese": "ローズバー"
+    },
+    {
+      "chinese": "瑞恩的公寓",
+      "japanese": "りゅうじのアパート"
+    },
+    {
+      "chinese": "电脑",
+      "japanese": "パソコン"
+    },
+    {
+      "chinese": "电脑桌",
+      "japanese": "パソコンデスク"
+    },
+    {
+      "chinese": "男卫生间",
+      "japanese": "男子トイレ"
+    },
+    {
+      "chinese": "画架",
+      "japanese": "イーゼル"
+    },
+    {
+      "chinese": "空卧室",
+      "japanese": "空の寝室"
+    },
+    {
+      "chinese": "竖琴",
+      "japanese": "ハープ"
+    },
+    {
+      "chinese": "约翰逊公园",
+      "japanese": "ジョンソン公園"
+    },
+    {
+      "chinese": "艺术家共居空间",
+      "japanese": "アーティスト共有スペース"
+    },
+    {
+      "chinese": "花园",
+      "japanese": "庭"
+    },
+    {
+      "chinese": "花园座椅",
+      "japanese": "庭の椅子"
+    },
+    {
+      "chinese": "花洒",
+      "japanese": "シャワー"
+    },
+    {
+      "chinese": "药店柜台",
+      "japanese": "薬局カウンター"
+    },
+    {
+      "chinese": "药店柜台后面",
+      "japanese": "薬局カウンターの後ろ"
+    },
+    {
+      "chinese": "药店货架",
+      "japanese": "薬局の棚"
+    },
+    {
+      "chinese": "莫雷诺家族的房子",
+      "japanese": "モレノ家の家"
+    },
+    {
+      "chinese": "走廊",
+      "japanese": "廊下"
+    },
+    {
+      "chinese": "酒吧",
+      "japanese": "バー"
+    },
+    {
+      "chinese": "酒吧顾客座位",
+      "japanese": "バーの客席"
+    },
+    {
+      "chinese": "钢琴",
+      "japanese": "ピアノ"
+    },
+    {
+      "chinese": "阿伊莎的房间",
+      "japanese": "あいかの部屋"
+    },
+    {
+      "chinese": "阿比盖尔的房间",
+      "japanese": "あきこの部屋"
+    },
+    {
+      "chinese": "阿比盖尔的浴室",
+      "japanese": "あきこの浴室"
+    },
+    {
+      "chinese": "霍布斯咖啡馆",
+      "japanese": "ホブズカフェ"
+    },
+    {
+      "chinese": "麦克风",
+      "japanese": "マイク"
+    },
+    {
+      "chinese": "黑板",
+      "japanese": "黒板"
+    }
+  ]
