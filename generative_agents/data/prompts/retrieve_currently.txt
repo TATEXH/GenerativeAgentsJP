@@ -1,12 +1,12 @@
-${agent} 在 ${time} 的状态：
+${agent}の${time}における状態：
 ${currently}
 
-${agent} 在 ${time} 结束时记得这些事情：
+${agent}が{time}の終わりに覚えていること：
 ${plan}
 
-${agent} 在 ${time} 结束时的想法和感受：
+${agent}の${time}の終わりにおける思考と感情：
 ${thought}
 
-现在是 ${current_time}。根据上述情况，以第三人称，用一句话描述 ${agent} 在 ${current_time} 的状态，以反映 ${agent} 在 ${time} 结束时的想法和感受。
+現在時刻は${current_time}です。上記の状況に基づき、三人称視点で、${agent}の${time}の終わりにおける思考と感情を反映するように、${agent}の${current_time}における状態を一文で説明してください。
 
-输出格式：状态: <新状态>
+出力フォーマット：状態：<新しい状態>

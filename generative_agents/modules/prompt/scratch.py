@@ -219,11 +219,21 @@ class Scratch:
         )
 
         def _callback(response):
+            # デバッグ用: 実際のレスポンスを出力
+            print(f"[DEBUG] schedule_decompose response: {response[:500]}")
             patterns = [
-                "\d{1,2}\) .*\*计划\* (.*)[\(（]+耗时[:： ]+(\d{1,2})[,， ]+剩余[:： ]+\d*[\)）]",
+                r"(\d{1,2})\)\s*.*?:\s*(.*?)\s*予定（所要時間：(\d{1,2})分?、残り：\d*分?）",
             ]
+            print(f"[DEBUG] Using pattern: {patterns[0]}")
+            import re
+            # テスト用のマッチング
+            test_line = "1) たくみ: グループメンバーの確認と出席確認 予定（所要時間：5分、残り：55分）"
+            match = re.search(patterns[0], test_line)
+            print(f"[DEBUG] Test match result: {match.groups() if match else 'No match'}")
+            
             schedules = parse_llm_output(response, patterns, mode="match_all")
-            schedules = [(s[0].strip("."), int(s[1])) for s in schedules]
+            print(f"[DEBUG] Raw schedules: {schedules}")
+            schedules = [(s[1].strip("."), int(s[2])) for s in schedules]  # s[1]がアクティビティ、s[2]が時間
             left = plan["duration"] - sum([s[1] for s in schedules])
             if left > 0:
                 schedules.append((plan["describe"], left))
@@ -475,11 +485,22 @@ class Scratch:
         )
 
         def _callback(response):
+            # デバッグ用出力
+            print(f"[DEBUG] describe_object response: {response}")
             patterns = [
-                "<" + obj + "> ?" + "(.*)。",
-                "<" + obj + "> ?" + "(.*)",
+                "出力：<" + obj + ">: (.*)。?",
+                "出力：<" + obj + ">: (.*)",
+                "<" + obj + ">: (.*)。?", 
+                "<" + obj + ">: (.*)",
+                # 後方互換性のための古いパターン
+                "出力：<" + obj + ">(.*)。?",
+                "出力：<" + obj + ">(.*)",
             ]
-            return parse_llm_output(response, patterns)
+            result = parse_llm_output(response, patterns)
+            # 結果を完全な形式で返す
+            if result:
+                return f"<{obj}>: {result}"
+            return f"<{obj}>: 不明"
 
         return {"prompt": prompt, "callback": _callback, "failsafe": "空闲"}
 

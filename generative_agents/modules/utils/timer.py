@@ -55,13 +55,13 @@ class Timer:
 
     def get_weekday(self, t):
         weekday_dict = {
-            0: "星期一",
-            1: "星期二",
-            2: "星期三",
-            3: "星期四",
-            4: "星期五",
-            5: "星期六",
-            6: "星期日"
+            0: "月曜日",
+            1: "火曜日",
+            2: "水曜日",
+            3: "木曜日",
+            4: "金曜日",
+            5: "土曜日",
+            6: "日曜日"
         }
         weekday = weekday_dict[t.weekday()]
         return weekday

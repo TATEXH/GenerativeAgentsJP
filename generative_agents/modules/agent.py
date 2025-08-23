@@ -234,12 +234,12 @@ class Agent:
                 end = starts[idx + 1] if idx + 1 < len(starts) else 24 * 60
                 self.schedule.add_plan(schedule[start], end - start)
             schedule_time = utils.get_timer().time_format_cn(self.schedule.create)
-            thought = "这是 {} 在 {} 的计划：{}".format(
+            thought = "これは {} の {} の計画です：{}".format(
                 self.name, schedule_time, "；".join(init_schedule)
             )
             event = memory.Event(
                 self.name,
-                "计划",
+                "計画",
                 schedule_time,
                 describe=thought,
                 address=self.get_tile().get_address(),
