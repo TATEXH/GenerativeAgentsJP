@@ -1,0 +1,847 @@
+{
+  "stride": 10,
+  "time": "20240213-11:50",
+  "maze": {
+    "path": "assets/village/maze.json"
+  },
+  "agent_base": {
+    "percept": {
+      "mode": "box",
+      "vision_r": 8,
+      "att_bandwidth": 8
+    },
+    "schedule": {
+      "max_try": 5,
+      "diversity": 5
+    },
+    "think": {
+      "llm": {
+        "provider": "ollama",
+        "model": "gpt-oss:20b",
+        "base_url": "http://192.168.1.7:11434/v1",
+        "api_key": ""
+      },
+      "interval": 1000,
+      "poignancy_max": 20
+    },
+    "chat_iter": 4,
+    "associate": {
+      "embedding": {
+        "provider": "ollama",
+        "model": "bge-m3:latest",
+        "base_url": "http://192.168.1.7:11434",
+        "api_key": ""
+      },
+      "retention": 8
+    }
+  },
+  "agents": {
+    "あいか": {
+      "config_path": "assets/village/agents/あいか/agent.json",
+      "status": {
+        "poignancy": 0
+      },
+      "schedule": {
+        "create": "20240213-09:30:00",
+        "daily_schedule": [
+          {
+            "idx": 0,
+            "describe": "睡觉",
+            "start": 0,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 1,
+            "describe": "睡觉",
+            "start": 60,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 2,
+            "describe": "睡觉",
+            "start": 120,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 3,
+            "describe": "睡觉",
+            "start": 180,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 4,
+            "describe": "睡觉",
+            "start": 240,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 5,
+            "describe": "睡觉",
+            "start": 300,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 6,
+            "describe": "起床・朝食準備・朝食・学生証確認・図書館へ移動",
+            "start": 360,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 7,
+            "describe": "学生証確認・図書館へ移動",
+            "start": 420,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 8,
+            "describe": "研究資料整理・メモ作成",
+            "start": 480,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 9,
+            "describe": "文献レビュー（シェイクスピア劇の言語使用）",
+            "start": 540,
+            "duration": 60,
+            "decompose": [
+              {
+                "idx": 0,
+                "describe": "文献レビューの資料検索",
+                "start": 540,
+                "duration": 6
+              },
+              {
+                "idx": 1,
+                "describe": "シェイクスピア劇の要旨を読み取り抽出",
+                "start": 546,
+                "duration": 6
+              },
+              {
+                "idx": 2,
+                "describe": "引用箇所を整理しメモ化",
+                "start": 552,
+                "duration": 6
+              },
+              {
+                "idx": 3,
+                "describe": "メモをまとめて議論ポイントを洗い出す",
+                "start": 558,
+                "duration": 6
+              },
+              {
+                "idx": 4,
+                "describe": "言語パターン（比喩・修辞法）を分析",
+                "start": 564,
+                "duration": 6
+              },
+              {
+                "idx": 5,
+                "describe": "批評的視点を検討し仮説を立案",
+                "start": 570,
+                "duration": 6
+              },
+              {
+                "idx": 6,
+                "describe": "仮説に対する証拠を文献から探す",
+                "start": 576,
+                "duration": 6
+              },
+              {
+                "idx": 7,
+                "describe": "結論の骨組みを作成",
+                "start": 582,
+                "duration": 6
+              },
+              {
+                "idx": 8,
+                "describe": "結論を文章化し、論文構成を整理",
+                "start": 588,
+                "duration": 6
+              },
+              {
+                "idx": 9,
+                "describe": "次回の研究計画と必要資料リストを作成",
+                "start": 594,
+                "duration": 6
+              }
+            ]
+          },
+          {
+            "idx": 10,
+            "describe": "授業出席",
+            "start": 600,
+            "duration": 60,
+            "decompose": [
+              {
+                "idx": 0,
+                "describe": "授業に出席し準備を整える",
+                "start": 600,
+                "duration": 15
+              },
+              {
+                "idx": 1,
+                "describe": "講義の導入部を聴く",
+                "start": 615,
+                "duration": 10
+              },
+              {
+                "idx": 2,
+                "describe": "重要ポイントをメモする",
+                "start": 625,
+                "duration": 10
+              },
+              {
+                "idx": 3,
+                "describe": "クラスディスカッションに参加する",
+                "start": 635,
+                "duration": 10
+              },
+              {
+                "idx": 4,
+                "describe": "講義内容をまとめる",
+                "start": 645,
+                "duration": 10
+              },
+              {
+                "idx": 5,
+                "describe": "メモを確認し次回の読書計画を立てる",
+                "start": 655,
+                "duration": 5
+              }
+            ]
+          },
+          {
+            "idx": 11,
+            "describe": "授業出席",
+            "start": 660,
+            "duration": 60,
+            "decompose": [
+              {
+                "idx": 0,
+                "describe": "授業に備えて資料を確認する",
+                "start": 660,
+                "duration": 5
+              },
+              {
+                "idx": 1,
+                "describe": "シェイクスピア劇における言語使用の要点を再読する",
+                "start": 665,
+                "duration": 10
+              },
+              {
+                "idx": 2,
+                "describe": "講義室へ向かう",
+                "start": 675,
+                "duration": 5
+              },
+              {
+                "idx": 3,
+                "describe": "講義の前半を聴講する",
+                "start": 680,
+                "duration": 15
+              },
+              {
+                "idx": 4,
+                "describe": "講義中にメモを取る",
+                "start": 695,
+                "duration": 5
+              },
+              {
+                "idx": 5,
+                "describe": "講義の後半を聴講する",
+                "start": 700,
+                "duration": 15
+              },
+              {
+                "idx": 6,
+                "describe": "講義内容を簡潔にまとめる",
+                "start": 715,
+                "duration": 5
+              }
+            ]
+          },
+          {
+            "idx": 12,
+            "describe": "授業出席",
+            "start": 720,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 13,
+            "describe": "授業出席",
+            "start": 780,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 14,
+            "describe": "卒業論文アウトライン作成",
+            "start": 840,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 15,
+            "describe": "軽食・短い休憩",
+            "start": 900,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 16,
+            "describe": "執筆クラス課題作業",
+            "start": 960,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 17,
+            "describe": "夕食",
+            "start": 1020,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 18,
+            "describe": "自由時間（友人連絡・リラックス）",
+            "start": 1080,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 19,
+            "describe": "論文執筆（章の構成と執筆）",
+            "start": 1140,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 20,
+            "describe": "論文執筆",
+            "start": 1200,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 21,
+            "describe": "リラックス（音楽・ストレッチ）",
+            "start": 1260,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 22,
+            "describe": "就寝",
+            "start": 1320,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 23,
+            "describe": "就寝",
+            "start": 1380,
+            "duration": 60,
+            "decompose": {}
+          }
+        ]
+      },
+      "associate": {
+        "memory": {
+          "event": [
+            "node_52",
+            "node_51",
+            "node_50",
+            "node_49",
+            "node_48",
+            "node_47",
+            "node_46",
+            "node_30",
+            "node_29",
+            "node_28",
+            "node_27",
+            "node_26",
+            "node_25",
+            "node_24",
+            "node_23",
+            "node_22",
+            "node_21",
+            "node_5",
+            "node_4",
+            "node_3",
+            "node_2",
+            "node_1"
+          ],
+          "thought": [
+            "node_67",
+            "node_66",
+            "node_65",
+            "node_64",
+            "node_63",
+            "node_62",
+            "node_61",
+            "node_60",
+            "node_59",
+            "node_58",
+            "node_57",
+            "node_56",
+            "node_55",
+            "node_54",
+            "node_53",
+            "node_45",
+            "node_44",
+            "node_43",
+            "node_42",
+            "node_41",
+            "node_40",
+            "node_39",
+            "node_38",
+            "node_37",
+            "node_36",
+            "node_35",
+            "node_34",
+            "node_33",
+            "node_32",
+            "node_31",
+            "node_20",
+            "node_19",
+            "node_18",
+            "node_17",
+            "node_16",
+            "node_15",
+            "node_14",
+            "node_13",
+            "node_12",
+            "node_11",
+            "node_10",
+            "node_9",
+            "node_8",
+            "node_7",
+            "node_6",
+            "node_0"
+          ],
+          "chat": []
+        }
+      },
+      "chats": [],
+      "currently": "あいかは、シェイクスピア劇における言語の使用をテーマにした卒業論文の研究をしています。また、執筆についてさらに学ぶため、授業にも出席しています。",
+      "action": {
+        "event": {
+          "subject": "あいか",
+          "predicate": "此时",
+          "object": "講義の後半を聴講する",
+          "describe": "講義の後半を聴講する",
+          "address": [
+            "the Ville",
+            "オークヒル学院",
+            "教室",
+            "教室の生徒の席"
+          ],
+          "emoji": "講義の後半を聴講する"
+        },
+        "obj_event": {
+          "subject": "教室の生徒の席",
+          "predicate": "此时",
+          "object": ": 空席",
+          "describe": "<教室の生徒の席>: 空席",
+          "address": [
+            "the Ville",
+            "オークヒル学院",
+            "教室",
+            "教室の生徒の席"
+          ],
+          "emoji": ""
+        },
+        "start": "20240213-11:40:00",
+        "duration": 15
+      },
+      "coord": [
+        115,
+        25
+      ]
+    },
+    "けんじ": {
+      "config_path": "assets/village/agents/けんじ/agent.json",
+      "status": {
+        "poignancy": 19
+      },
+      "schedule": {
+        "create": "20240213-09:30:00",
+        "daily_schedule": [
+          {
+            "idx": 0,
+            "describe": "睡觉",
+            "start": 0,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 1,
+            "describe": "睡觉",
+            "start": 60,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 2,
+            "describe": "睡觉",
+            "start": 120,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 3,
+            "describe": "睡觉",
+            "start": 180,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 4,
+            "describe": "睡觉",
+            "start": 240,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 5,
+            "describe": "睡觉",
+            "start": 300,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 6,
+            "describe": "睡觉",
+            "start": 360,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 7,
+            "describe": "起床并吃早餐",
+            "start": 420,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 8,
+            "describe": "前往图书馆并开始文献综述",
+            "start": 480,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 9,
+            "describe": "继续文献综述",
+            "start": 540,
+            "duration": 60,
+            "decompose": [
+              {
+                "idx": 0,
+                "describe": "図書館で文献のアブストラクトを読む",
+                "start": 540,
+                "duration": 5
+              },
+              {
+                "idx": 1,
+                "describe": "主要ポイントをまとめる",
+                "start": 545,
+                "duration": 10
+              },
+              {
+                "idx": 2,
+                "describe": "関連研究をリストアップする",
+                "start": 555,
+                "duration": 10
+              },
+              {
+                "idx": 3,
+                "describe": "研究ギャップをメモする",
+                "start": 565,
+                "duration": 10
+              },
+              {
+                "idx": 4,
+                "describe": "仮説を立てる",
+                "start": 575,
+                "duration": 10
+              },
+              {
+                "idx": 5,
+                "describe": "章立てをアウトライン化する",
+                "start": 585,
+                "duration": 5
+              },
+              {
+                "idx": 6,
+                "describe": "次の作業をスケジュールする",
+                "start": 590,
+                "duration": 5
+              },
+              {
+                "idx": 7,
+                "describe": "继续文献综述",
+                "start": 595,
+                "duration": 5
+              }
+            ]
+          },
+          {
+            "idx": 10,
+            "describe": "短暂休息（伸展和轻食）",
+            "start": 600,
+            "duration": 60,
+            "decompose": [
+              {
+                "idx": 0,
+                "describe": "文献を検索して関連論文をピックアップ",
+                "start": 600,
+                "duration": 10
+              },
+              {
+                "idx": 1,
+                "describe": "選んだ論文を読み、主要な主張を抜き出す",
+                "start": 610,
+                "duration": 10
+              },
+              {
+                "idx": 2,
+                "describe": "主要主張を自分の研究テーマと照らし合わせてメモを取る",
+                "start": 620,
+                "duration": 10
+              },
+              {
+                "idx": 3,
+                "describe": "引用箇所を抜粋して引用リストを作成する",
+                "start": 630,
+                "duration": 10
+              },
+              {
+                "idx": 4,
+                "describe": "まとめたメモをアウトラインに整理する",
+                "start": 640,
+                "duration": 10
+              },
+              {
+                "idx": 5,
+                "describe": "次の段階（データ収集）を計画し、スケジュールを立てる",
+                "start": 650,
+                "duration": 10
+              }
+            ]
+          },
+          {
+            "idx": 11,
+            "describe": "继续文献综述并记录要点",
+            "start": 660,
+            "duration": 60,
+            "decompose": [
+              {
+                "idx": 0,
+                "describe": "文献を読む",
+                "start": 660,
+                "duration": 15
+              },
+              {
+                "idx": 1,
+                "describe": "重要箇所にマーカーを付ける",
+                "start": 675,
+                "duration": 10
+              },
+              {
+                "idx": 2,
+                "describe": "要点をまとめる",
+                "start": 685,
+                "duration": 15
+              },
+              {
+                "idx": 3,
+                "describe": "関連研究と照らし合わせる",
+                "start": 700,
+                "duration": 10
+              },
+              {
+                "idx": 4,
+                "describe": "研究ノートに書き起こす",
+                "start": 710,
+                "duration": 10
+              }
+            ]
+          },
+          {
+            "idx": 12,
+            "describe": "在霍布斯咖啡厅吃午餐",
+            "start": 720,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 13,
+            "describe": "整理数据集并进行初步分析",
+            "start": 780,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 14,
+            "describe": "与导师在线会议，汇报进度并获取反馈",
+            "start": 840,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 15,
+            "describe": "开始撰写研究论文的序论和背景章节",
+            "start": 900,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 16,
+            "describe": "短暂休息（散步和补水）",
+            "start": 960,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 17,
+            "describe": "在霍布斯咖啡厅吃晚餐",
+            "start": 1020,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 18,
+            "describe": "继续图书馆工作，分析结果章节",
+            "start": 1080,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 19,
+            "describe": "整理研究笔记并制定次日计划",
+            "start": 1140,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 20,
+            "describe": "进行轻度运动（慢跑或伸展）",
+            "start": 1200,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 21,
+            "describe": "轻食并放松",
+            "start": 1260,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 22,
+            "describe": "编辑论文草稿，检查语法和引用",
+            "start": 1320,
+            "duration": 60,
+            "decompose": {}
+          },
+          {
+            "idx": 23,
+            "describe": "写日记，回顾今天成果与挑战，准备就寝",
+            "start": 1380,
+            "duration": 60,
+            "decompose": {}
+          }
+        ]
+      },
+      "associate": {
+        "memory": {
+          "event": [
+            "node_31",
+            "node_30",
+            "node_29",
+            "node_28",
+            "node_27",
+            "node_26",
+            "node_25",
+            "node_9",
+            "node_8",
+            "node_7",
+            "node_6",
+            "node_5",
+            "node_4",
+            "node_3",
+            "node_2",
+            "node_1"
+          ],
+          "thought": [
+            "node_24",
+            "node_23",
+            "node_22",
+            "node_21",
+            "node_20",
+            "node_19",
+            "node_18",
+            "node_17",
+            "node_16",
+            "node_15",
+            "node_14",
+            "node_13",
+            "node_12",
+            "node_11",
+            "node_10",
+            "node_0"
+          ],
+          "chat": []
+        }
+      },
+      "chats": [],
+      "currently": "けんじは、低所得地域におけるジェントリフィケーション（都市の富裕化現象）の影響に関する研究論文を執筆しています。",
+      "action": {
+        "event": {
+          "subject": "けんじ",
+          "predicate": "此时",
+          "object": "研究ノートに書き起こす",
+          "describe": "研究ノートに書き起こす",
+          "address": [
+            "the Ville",
+            "柳市場と薬局",
+            "店",
+            "雑貨店カウンター"
+          ],
+          "emoji": "研究ノートに書き起こす"
+        },
+        "obj_event": {
+          "subject": "雑貨店カウンター",
+          "predicate": "此时",
+          "object": ": 整頓済み",
+          "describe": "<雑貨店カウンター>: 整頓済み",
+          "address": [
+            "the Ville",
+            "柳市場と薬局",
+            "店",
+            "雑貨店カウンター"
+          ],
+          "emoji": ""
+        },
+        "start": "20240213-11:50:00",
+        "duration": 10
+      },
+      "coord": [
+        88,
+        46
+      ]
+    }
+  },
+  "step": 15
+}

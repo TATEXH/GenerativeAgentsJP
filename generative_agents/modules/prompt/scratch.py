@@ -286,12 +286,23 @@ class Scratch:
         )
 
         def _callback(response):
-            patterns = [
-                "^\[(\d{1,2}:\d{1,2}) ?- ?(\d{1,2}:\d{1,2})\] (.*)",
-                "^\[(\d{1,2}:\d{1,2}) ?~ ?(\d{1,2}:\d{1,2})\] (.*)",
-                "^\[(\d{1,2}:\d{1,2}) ?至 ?(\d{1,2}:\d{1,2})\] (.*)",
-            ]
-            schedules = parse_llm_output(response, patterns, mode="match_all")
+            import re
+            # 全記号対応の包括的パターン
+            pattern = r"^\[(\d{1,2}:\d{1,2})\s*[-–—~至]\s*(\d{1,2}:\d{1,2})\]\s*(.*)"
+            
+            schedules = []
+            lines = response.strip().split('\n')
+            
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                    
+                match = re.match(pattern, line)
+                if match:
+                    start, end, describe = match.groups()
+                    schedules.append((start.strip(), end.strip(), describe.strip()))
+            
             decompose = []
             for start, end, describe in schedules:
                 m_start = utils.daily_duration(utils.to_date(start, "%H:%M"))
@@ -304,7 +315,10 @@ class Scratch:
                         "duration": m_end - m_start,
                     }
                 )
-            return decompose
+            
+            if decompose:
+                return decompose
+            raise Exception("No valid schedule format found")
 
         return {"prompt": prompt, "callback": _callback, "failsafe": plan["decompose"]}
 
@@ -779,9 +793,9 @@ class Scratch:
             "prompt": prompt,
             "callback": _callback,
             "failsafe": [
-                "{} 是谁？".format(self.name),
-                "{} 住在哪里？".format(self.name),
-                "{} 今天要做什么？".format(self.name),
+                "{} は誰ですか？".format(self.name),
+                "{} はどこに住んでいますか？".format(self.name),
+                "{} は今日何をすべきか？".format(self.name),
             ],
         }
 
@@ -795,22 +809,32 @@ class Scratch:
         )
 
         def _callback(response):
-            patterns = [
-                "^\d{1}[\. ]+(.*)[。 ]*[\(（]+.*序号[:： ]+([\d,， ]+)[\)）]",
-                "^\d{1}[\. ]+(.*)[。 ]*[\(（]([\d,， ]+)[\)）]",
-            ]
-            insights, outputs = [], parse_llm_output(
-                response, patterns, mode="match_all"
-            )
-            if outputs:
-                for output in outputs:
-                    if isinstance(output, str):
-                        insight, node_ids = output, []
-                    elif len(output) == 2:
-                        insight, reason = output
-                        indices = [int(e.strip()) for e in reason.split(",")]
-                        node_ids = [nodes[i].node_id for i in indices if i < len(nodes)]
-                    insights.append([insight.strip(), node_ids])
+            import re
+            insights = []
+            lines = response.strip().split('\n')
+            
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                # セミコロン区切りのパターン
+                match = re.match(r"^([^;]+);([0-9,\s]+)$", line)
+                if match:
+                    insight = match.group(1).strip()
+                    indices_str = match.group(2).strip()
+                    indices = [int(i.strip()) for i in indices_str.split(',') if i.strip().isdigit()]
+                    node_ids = [nodes[i].node_id for i in indices if i < len(nodes)]
+                    insights.append([insight, node_ids])
+                else:
+                    # フォールバック：見解のみ（番号なし）
+                    match = re.match(r"^([^;]+)$", line)
+                    if match:
+                        insight = match.group(1).strip()
+                        node_ids = []
+                        insights.append([insight, node_ids])
+            
+            if insights:
                 return insights
             raise Exception("Can not find insights")
 
@@ -819,8 +843,8 @@ class Scratch:
             "callback": _callback,
             "failsafe": [
                 [
-                    "{} 在考虑下一步该做什么".format(self.name),
-                    [nodes[0].node_id],
+                    "{} は次のステップを検討しています".format(self.name),
+                    [nodes[0].node_id] if nodes else [],
                 ]
             ],
         }

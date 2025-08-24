@@ -87,7 +87,7 @@ class Agent:
 
     def reset(self):
         if not self._llm:
-            self._llm = create_llm_model(self.think_config["llm"])
+            self._llm = create_llm_model(self.think_config["llm"], self.logger)
 
     def completion(self, func_hint, *args, **kwargs):
         assert hasattr(
@@ -386,7 +386,7 @@ class Agent:
                     node = res[-1]
                     evidence.append(node.node_id)
             thought = self.completion("reflect_chat_planing", self.chats)
-            _add_thought(f"对于 {self.name} 的计划：{thought}", evidence)
+            _add_thought(f"{self.name} の計画について：{thought}", evidence)
             thought = self.completion("reflect_chat_memory", self.chats)
             _add_thought(f"{self.name} {thought}", evidence)
         self.status["poignancy"] = 0

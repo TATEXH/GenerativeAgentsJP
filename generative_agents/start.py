@@ -157,6 +157,57 @@ def get_config(start_time="20240213-09:30", stride=15, agents=None):
     return config
 
 
+def select_agents(agents_arg, all_personas):
+    """コマンドライン引数に基づいてエージェントを選択"""
+    if agents_arg is None:
+        return all_personas
+    
+    # 数値の場合
+    if agents_arg.isdigit():
+        num = int(agents_arg)
+        if num > len(all_personas):
+            print(f"⚠️  指定された人数 {num} が利用可能な人数 {len(all_personas)} を超えています。全員を使用します。")
+            return all_personas
+        selected = all_personas[:num]
+        print(f"✅ 最初の {num} 人のエージェントを使用: {', '.join(selected)}")
+        return selected
+    
+    # 名前のカンマ区切りの場合
+    selected = [name.strip() for name in agents_arg.split(',')]
+    valid = [name for name in selected if name in all_personas]
+    invalid = [name for name in selected if name not in all_personas]
+    
+    if invalid:
+        print(f"⚠️  無効なエージェント名: {', '.join(invalid)}")
+    
+    if not valid:
+        print(f"⚠️  有効なエージェントが見つかりません。全員を使用します。")
+        return all_personas
+    
+    print(f"✅ 選択されたエージェント: {', '.join(valid)}")
+    return valid
+
+
+def update_config_with_poignancy(config, poignancy):
+    """内省閾値をconfigに適用"""
+    if poignancy is not None:
+        if poignancy < 10:
+            print(f"⚠️  内省閾値 {poignancy} が小さすぎます。頻繁な内省により処理が遅くなる可能性があります。")
+        
+        if "agent_base" in config:
+            config["agent_base"]["think"]["poignancy_max"] = poignancy
+        else:
+            # agent_baseがない場合は作成
+            if "agent_base" not in config:
+                config["agent_base"] = {"think": {}}
+            elif "think" not in config["agent_base"]:
+                config["agent_base"]["think"] = {}
+            config["agent_base"]["think"]["poignancy_max"] = poignancy
+        
+        print(f"✅ 内省閾値を {poignancy} に設定しました")
+    return config
+
+
 load_dotenv(find_dotenv())
 
 parser = argparse.ArgumentParser(description="console for village")
@@ -167,6 +218,8 @@ parser.add_argument("--step", type=int, default=10, help="The simulate step")
 parser.add_argument("--stride", type=int, default=10, help="The step stride in minute")
 parser.add_argument("--verbose", type=str, default="debug", help="The verbose level")
 parser.add_argument("--log", type=str, default="", help="Name of the log file")
+parser.add_argument("--agents", type=str, default=None, help="Number of agents or comma-separated agent names")
+parser.add_argument("--poignancy", type=int, default=None, help="Poignancy threshold for reflection (default: 150)")
 args = parser.parse_args()
 
 
@@ -194,8 +247,14 @@ if __name__ == "__main__":
             print("No checkpoint file found to resume running.")
             exit(0)
         start_step = sim_config["step"]
+        # resumeの場合も内省閾値を更新
+        sim_config = update_config_with_poignancy(sim_config, args.poignancy)
     else:
-        sim_config = get_config(start_time, args.stride, personas)
+        # エージェントを選択
+        selected_personas = select_agents(args.agents, personas)
+        sim_config = get_config(start_time, args.stride, selected_personas)
+        # 内省閾値を設定
+        sim_config = update_config_with_poignancy(sim_config, args.poignancy)
         start_step = 0
 
     static_root = "frontend/static"

@@ -6,12 +6,13 @@ import requests
 
 
 class LLMModel:
-    def __init__(self, config):
+    def __init__(self, config, logger=None):
         self._api_key = config["api_key"]
         self._base_url = config["base_url"]
         self._model = config["model"]
         self._meta_responses = []
         self._summary = {"total": [0, 0, 0]}
+        self.logger = logger
 
         self._handle = self.setup(config)
         self._enabled = True
@@ -43,7 +44,29 @@ class LLMModel:
                 else:
                     response = meta_response
             except Exception as e:
-                print(f"LLMModel.completion() caused an error: {e}")
+                error_msg = str(e)
+                if "Failed to match llm output" in error_msg:
+                    # パーシングエラーを目立つように表示
+                    error_detail = f"\n{'='*60}\n"
+                    error_detail += f"❌ LLM出力パーシングエラー発生！\n"
+                    error_detail += f"   呼び出し元: {caller}\n"
+                    error_detail += f"   エラー: {error_msg}\n"
+                    if self._meta_responses:
+                        error_detail += f"   LLM出力（先頭200文字）:\n"
+                        error_detail += f"   {self._meta_responses[-1][:200]}...\n"
+                    error_detail += f"{'='*60}\n"
+                    
+                    if self.logger:
+                        self.logger.error(error_detail)
+                    else:
+                        print(error_detail)
+                else:
+                    # その他のエラー
+                    if self.logger:
+                        self.logger.error(f"LLMModel.completion() caused an error: {e}")
+                    else:
+                        print(f"LLMModel.completion() caused an error: {e}")
+                
                 time.sleep(5)
                 response = None
                 continue
@@ -128,14 +151,14 @@ class OllamaLLMModel(LLMModel):
         return ""
 
 
-def create_llm_model(llm_config):
-    """Create llm model"""
+def create_llm_model(llm_config, logger=None):
+    """Create llm model with optional logger"""
 
     if llm_config["provider"] == "ollama":
-        return OllamaLLMModel(llm_config)
+        return OllamaLLMModel(llm_config, logger)
 
     elif llm_config["provider"] == "openai":
-        return OpenAILLMModel(llm_config)
+        return OpenAILLMModel(llm_config, logger)
     else:
         raise NotImplementedError(
             "llm provider {} is not supported".format(llm_config["provider"])
