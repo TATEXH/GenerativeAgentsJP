@@ -53,7 +53,7 @@ class Scratch:
 
         def _callback(response):
             pattern = [
-                "评分[:： ]+(\d{1,2})",
+                "評価[:： ]+(\d{1,2})",
                 "(\d{1,2})",
             ]
             return int(parse_llm_output(response, pattern, "match_last"))
@@ -76,7 +76,7 @@ class Scratch:
 
         def _callback(response):
             pattern = [
-                "评分[:： ]+(\d{1,2})",
+                "評価[:： ]+(\d{1,2})",
                 "(\d{1,2})",
             ]
             return int(parse_llm_output(response, pattern, "match_last"))
@@ -133,22 +133,22 @@ class Scratch:
             return parse_llm_output(response, patterns, mode="match_all")
 
         failsafe = [
-            "早上6点起ベッド并完成早餐的例行工作",
-            "早上7点吃早餐",
-            "早上8点看书",
-            "中午12点吃午饭",
-            "下午1点小睡一会儿",
-            "晚上7点放松一下，看电视",
-            "晚上11点睡觉",
+            "朝6時に起床し朝食の準備をする",
+            "朝7時に朝食を食べる",
+            "朝8時に読書をする",
+            "昼12時に昼食を食べる",
+            "午後1時に少し昼寝をする",
+            "夜7時にリラックスしてテレビを見る",
+            "夜11時に就寝する",
         ]
         return {"prompt": prompt, "callback": _callback, "failsafe": failsafe}
 
     def prompt_schedule_daily(self, wake_up, daily_schedule):
         hourly_schedule = ""
         for i in range(wake_up):
-            hourly_schedule += f"[{i}:00] 睡觉\n"
+            hourly_schedule += f"[{i}:00] 睡眠\n"
         for i in range(wake_up, 24):
-            hourly_schedule += f"[{i}:00] <活动>\n"
+            hourly_schedule += f"[{i}:00] <活動>\n"
 
         prompt = self.build_prompt(
             "schedule_daily",
@@ -161,24 +161,24 @@ class Scratch:
         )
 
         failsafe = {
-            "6:00": "起ベッド并完成早晨的例行工作",
-            "7:00": "吃早餐",
-            "8:00": "读书",
-            "9:00": "读书",
-            "10:00": "读书",
-            "11:00": "读书",
-            "12:00": "吃午饭",
-            "13:00": "小睡一会儿",
-            "14:00": "小睡一会儿",
-            "15:00": "小睡一会儿",
-            "16:00": "继续工作",
-            "17:00": "继续工作",
-            "18:00": "回家",
-            "19:00": "放松，看电视",
-            "20:00": "放松，看电视",
-            "21:00": "睡前看书",
-            "22:00": "准备睡觉",
-            "23:00": "睡觉",
+            "6:00": "起床し朝の日課を行う",
+            "7:00": "朝食を食べる",
+            "8:00": "読書をする",
+            "9:00": "読書をする",
+            "10:00": "読書をする",
+            "11:00": "読書をする",
+            "12:00": "昼食を食べる",
+            "13:00": "少し昼寝をする",
+            "14:00": "少し昼寝をする",
+            "15:00": "少し昼寝をする",
+            "16:00": "作業を続ける",
+            "17:00": "作業を続ける",
+            "18:00": "帰宅する",
+            "19:00": "リラックスしてテレビを見る",
+            "20:00": "リラックスしてテレビを見る",
+            "21:00": "就寝前の読書",
+            "22:00": "就寝の準備",
+            "23:00": "就寝する",
         }
 
         def _callback(response):
@@ -197,7 +197,7 @@ class Scratch:
     def prompt_schedule_decompose(self, plan, schedule):
         def _plan_des(plan):
             start, end = schedule.plan_stamps(plan, time_format="%H:%M")
-            return f'{start} 至 {end}，{self.name} 计划 {plan["describe"]}'
+            return f'{start} から {end}まで、{self.name} は {plan["describe"]} を計画している'
 
         indices = range(
             max(plan["idx"] - 1, 0), min(plan["idx"] + 2, len(schedule.daily_schedule))
@@ -219,25 +219,67 @@ class Scratch:
         )
 
         def _callback(response):
-            # デバッグ用: 実際のレスポンスを出力
-            print(f"[DEBUG] schedule_decompose response: {response[:500]}")
-            patterns = [
-                r"(\d{1,2})\)\s*.*?:\s*(.*?)\s*予定（所要時間：(\d{1,2})分?、残り：\d*分?）",
-            ]
-            print(f"[DEBUG] Using pattern: {patterns[0]}")
             import re
-            # テスト用のマッチング
-            test_line = "1) たくみ: グループメンバーの確認と出席確認 予定（所要時間：5分、残り：55分）"
-            match = re.search(patterns[0], test_line)
-            print(f"[DEBUG] Test match result: {match.groups() if match else 'No match'}")
             
-            schedules = parse_llm_output(response, patterns, mode="match_all")
-            print(f"[DEBUG] Raw schedules: {schedules}")
-            schedules = [(s[1].strip("."), int(s[2])) for s in schedules]  # s[1]がアクティビティ、s[2]が時間
-            left = plan["duration"] - sum([s[1] for s in schedules])
+            # 複数のパターンを順番に試行
+            patterns = [
+                # パターン1: 「予定」あり、全角括弧
+                r"(\d{1,2})\)\s*[^:：]*[:：]\s*(.*?)\s*予定（所要時間：(\d{1,2})分?、残り：\d*分?）",
+                # パターン2: 「予定」なし、全角括弧（実際のLLM出力に対応）
+                r"(\d{1,2})\)\s*[^:：]*[:：]\s*(.*?)（所要時間：(\d{1,2})分?、残り：\d*分?）",
+                # パターン3: 「予定」あり、半角括弧
+                r"(\d{1,2})\)\s*[^:：]*[:：]\s*(.*?)\s*予定\(所要時間[：:]\s*(\d{1,2})分?、残り[：:]\s*\d*分?\)",
+                # パターン4: 「予定」なし、半角括弧
+                r"(\d{1,2})\)\s*[^:：]*[:：]\s*(.*?)\(所要時間[：:]\s*(\d{1,2})分?、残り[：:]\s*\d*分?\)",
+                # パターン5: より柔軟なパターン（全角・半角混在対応）
+                r"(\d{1,2})\)[^:：]*[:：]([^（(]*)(?:予定)?[（(]所要時間[:：]\s*(\d+)",
+            ]
+            
+            schedules = None
+            matched_pattern = None
+            
+            # 各パターンを試行
+            for i, pattern in enumerate(patterns):
+                try:
+                    matches = re.findall(pattern, response)
+                    if matches:
+                        schedules = matches
+                        matched_pattern = i + 1
+                        print(f"[DEBUG] Matched with pattern {matched_pattern}")
+                        break
+                except Exception as e:
+                    continue
+            
+            # どのパターンにもマッチしない場合
+            if not schedules:
+                print(f"[DEBUG] No pattern matched. Response sample: {response[:200]}")
+                # 最も基本的なパターンで再試行
+                fallback_pattern = r"(\d{1,2})\)[^:：]*[:：]([^（(）)]*)"
+                matches = re.findall(fallback_pattern, response)
+                if matches:
+                    # 時間情報がない場合はデフォルト10分を使用
+                    schedules = [(m[0], m[1].strip(), "10") for m in matches]
+                    print(f"[DEBUG] Used fallback pattern")
+                else:
+                    raise Exception("Failed to parse any schedule format")
+            
+            # 結果を整形
+            result_schedules = []
+            for s in schedules:
+                if len(s) >= 3:
+                    # 通常のパターンマッチ結果
+                    result_schedules.append((s[1].strip(".。 "), int(s[2])))
+                elif len(s) == 3 and isinstance(s[2], str):
+                    # fallbackパターンの結果
+                    result_schedules.append((s[1].strip(".。 "), int(s[2])))
+                    
+            # 残り時間の調整
+            total_used = sum([s[1] for s in result_schedules])
+            left = plan["duration"] - total_used
             if left > 0:
-                schedules.append((plan["describe"], left))
-            return schedules
+                result_schedules.append((plan["describe"], left))
+                
+            return result_schedules
 
         failsafe = [(plan["describe"], 10) for _ in range(int(plan["duration"] / 10))]
         return {"prompt": prompt, "callback": _callback, "failsafe": failsafe}
@@ -351,8 +393,10 @@ class Scratch:
 
         def _callback(response):
             patterns = [
-                ".*应该去[:： ]*(.*)。",
-                ".*应该去[:： ]*(.*)",
+                ".*が行くべき場所[:：]\\s*(.*)。?",
+                ".*が行くべき場所[:：]\\s*(.*)",
+                ".*行くべき[:： ]*(.*)。",
+                ".*行くべき[:： ]*(.*)",
                 "(.+)。",
                 "(.+)",
             ]
@@ -386,8 +430,10 @@ class Scratch:
 
         def _callback(response):
             patterns = [
-                ".*应该去[:： ]*(.*)。",
-                ".*应该去[:： ]*(.*)",
+                ".*が行くべき場所[:：]\\s*(.*)。?",
+                ".*が行くべき場所[:：]\\s*(.*)",
+                ".*行くべき[:： ]*(.*)。",
+                ".*行くべき[:： ]*(.*)",
                 "(.+)。",
                 "(.+)",
             ]
@@ -412,8 +458,10 @@ class Scratch:
         def _callback(response):
             # pattern = ["The most relevant object from the Objects is: <(.+?)>", "<(.+?)>"]
             patterns = [
-                ".*是[:： ]*(.*)。",
-                ".*是[:： ]*(.*)",
+                ".*オブジェクト[:：]\\s*(.*)。?",
+                ".*オブジェクト[:：]\\s*(.*)",
+                ".*は[:： ]*(.*)。",
+                ".*は[:： ]*(.*)",
                 "(.+)。",
                 "(.+)",
             ]
@@ -462,10 +510,10 @@ class Scratch:
         )
 
         e_describe = describe.replace("(", "").replace(")", "").replace("<", "").replace(">", "")
-        if e_describe.startswith(subject + "此时"):
-            e_describe = e_describe.replace(subject + "此时", "")
+        if e_describe.startswith(subject + "現在"):
+            e_describe = e_describe.replace(subject + "現在", "")
         failsafe = Event(
-            subject, "此时", e_describe, describe=describe, address=address, emoji=emoji
+            subject, "現在", e_describe, describe=describe, address=address, emoji=emoji
         )
 
         def _callback(response):
@@ -499,16 +547,53 @@ class Scratch:
         )
 
         def _callback(response):
+            import re
             # デバッグ用出力
             print(f"[DEBUG] describe_object response: {response}")
+            
+            # オブジェクト名を正規表現用にエスケープ
+            escaped_obj = re.escape(obj)
+            
             patterns = [
-                "出力：<" + obj + ">: (.*)。?",
-                "出力：<" + obj + ">: (.*)",
-                "<" + obj + ">: (.*)。?", 
-                "<" + obj + ">: (.*)",
+                # 標準パターン（山括弧あり、半角コロン）
+                f"出力：<{escaped_obj}>: (.*)。?",
+                f"出力：<{escaped_obj}>: (.*)",
+                f"出力：<{escaped_obj}>:(.*)。?",
+                f"出力：<{escaped_obj}>:(.*)",
+                f"<{escaped_obj}>: (.*)。?", 
+                f"<{escaped_obj}>: (.*)",
+                f"<{escaped_obj}>:(.*)。?",
+                f"<{escaped_obj}>:(.*)",
+                # 全角コロンパターン（山括弧あり）
+                f"出力：<{escaped_obj}>： (.*)。?",
+                f"出力：<{escaped_obj}>： (.*)",
+                f"出力：<{escaped_obj}>：(.*)。?",
+                f"出力：<{escaped_obj}>：(.*)",
+                f"<{escaped_obj}>： (.*)。?", 
+                f"<{escaped_obj}>： (.*)",
+                f"<{escaped_obj}>：(.*)。?",
+                f"<{escaped_obj}>：(.*)",
+                # 山括弧なしパターン（半角コロン）
+                f"出力：{escaped_obj}: (.*)。?",
+                f"出力：{escaped_obj}: (.*)",
+                f"出力：{escaped_obj}:(.*)。?",
+                f"出力：{escaped_obj}:(.*)",
+                f"{escaped_obj}: (.*)。?", 
+                f"{escaped_obj}: (.*)",
+                f"{escaped_obj}:(.*)。?",
+                f"{escaped_obj}:(.*)",
+                # 山括弧なしパターン（全角コロン）
+                f"出力：{escaped_obj}： (.*)。?",
+                f"出力：{escaped_obj}： (.*)",
+                f"出力：{escaped_obj}：(.*)。?",
+                f"出力：{escaped_obj}：(.*)",
+                f"{escaped_obj}： (.*)。?", 
+                f"{escaped_obj}： (.*)",
+                f"{escaped_obj}：(.*)。?",
+                f"{escaped_obj}：(.*)",
                 # 後方互換性のための古いパターン
-                "出力：<" + obj + ">(.*)。?",
-                "出力：<" + obj + ">(.*)",
+                f"出力：<{escaped_obj}>(.*)。?",
+                f"出力：<{escaped_obj}>(.*)",
             ]
             result = parse_llm_output(response, patterns)
             # 結果を完全な形式で返す
@@ -516,13 +601,13 @@ class Scratch:
                 return f"<{obj}>: {result}"
             return f"<{obj}>: 不明"
 
-        return {"prompt": prompt, "callback": _callback, "failsafe": "空闲"}
+        return {"prompt": prompt, "callback": _callback, "failsafe": "空いている"}
 
     def prompt_decide_chat(self, agent, other, focus, chats):
         def _status_des(a):
             event = a.get_event()
             if a.path:
-                return f"{a.name} 正去往 {event.get_describe(False)}"
+                return f"{a.name} は {event.get_describe(False)} に向かっている"
             return event.get_describe()
 
         context = "。".join(
@@ -532,7 +617,7 @@ class Scratch:
         date_str = utils.get_timer().get_date("%Y-%m-%d %H:%M:%S")
         chat_history = ""
         if chats:
-            chat_history = f" {agent.name} 和 {other.name} 上次在 {chats[0].create} 聊过关于 {chats[0].describe} 的话题"
+            chat_history = f" {agent.name} と {other.name} は前回 {chats[0].create} に {chats[0].describe} について話した"
         a_des, o_des = _status_des(agent), _status_des(other)
 
         prompt = self.build_prompt(
@@ -549,7 +634,7 @@ class Scratch:
         )
 
         def _callback(response):
-            if "No" in response or "no" in response or "否" in response or "不" in response:
+            if "No" in response or "no" in response or "いいえ" in response or "違う" in response or "違います" in response:
                 return False
             return True
 
@@ -558,7 +643,7 @@ class Scratch:
     def prompt_decide_chat_terminate(self, agent, other, chats):
         conversation = "\n".join(["{}: {}".format(n, u) for n, u in chats])
         conversation = (
-            conversation or "[对话尚未开始]"
+            conversation or "[会話はまだ開始されていない]"
         )
 
         prompt = self.build_prompt(
@@ -571,7 +656,7 @@ class Scratch:
         )
 
         def _callback(response):
-            if "No" in response or "no" in response or "否" in response or "不" in response:
+            if "No" in response or "no" in response or "いいえ" in response or "違う" in response or "違います" in response:
                 return False
             return True
 
@@ -581,41 +666,41 @@ class Scratch:
         example1 = self.build_prompt(
             "decide_wait_example",
             {
-                "context": "简是丽兹的室友。2022-10-25 07:05，简和丽兹互相问候了早上好。",
+                "context": "簡はリズのルームメイト。2022-10-25 07:05、簡とリズは互いにおはようと挨拶した。",
                 "date": "2022-10-25 07:09",
-                "agent": "简",
-                "another": "丽兹",
-                "status": "简 正要去浴室",
-                "another_status": "丽兹 已经在 使用浴室",
-                "action": "使用浴室",
-                "another_action": "使用浴室",
-                "reason": "推理：简和丽兹都想用浴室。简和丽兹同时使用浴室会很奇怪。所以，既然丽兹已经在用浴室了，对简来说最好的选择就是等着用浴室。\n",
-                "answer": "答案：<选项A>",
+                "agent": "簡",
+                "another": "リズ",
+                "status": "簡 は浴室に行こうとしている",
+                "another_status": "リズ は既に 浴室を使用中",
+                "action": "浴室を使用",
+                "another_action": "浴室を使用",
+                "reason": "推理：簡とリズは両方とも浴室を使いたい。簡とリズが同時に浴室を使うのは変だ。だから、リズが既に浴室を使っているなら、簡にとって最良の選択は浴室の使用を待つことだ。\n",
+                "answer": "答案：<選択肢A>",
             }
         )
         example2 = self.build_prompt(
             "decide_wait_example",
             {
-                "context": "山姆是莎拉的朋友。2022-10-24 23:00，山姆和莎拉就最喜欢的电影进行了交谈。",
+                "context": "サムはサラの友人。2022-10-24 23:00、サムとサラは好きな映画について会話した。",
                 "date": "2022-10-25 12:40",
-                "agent": "山姆",
-                "another": "莎拉",
-                "status": "山姆 正要去吃午饭",
-                "another_status": "莎拉 已经在 洗衣服",
-                "action": "吃午饭",
-                "another_action": "洗衣服",
-                "reason": "推理：山姆可能会在餐厅吃午饭。莎拉可能会去洗衣房洗衣服。由于山姆和莎拉需要使用不同的区域，他们的行为并不冲突。所以，由于山姆和莎拉将在不同的区域，山姆现在继续吃午饭。\n",
-                "answer": "答案：<选项B>",
+                "agent": "サム",
+                "another": "サラ",
+                "status": "サム は昼食を食べに行こうとしている",
+                "another_status": "サラ は既に 洗濯をしている",
+                "action": "昼食を食べる",
+                "another_action": "洗濯をする",
+                "reason": "推理：サムはレストランで昼食を食べるかもしれない。サラは洗濯室で洗濯をするかもしれない。サムとサラは異なるエリアを使用する必要があるため、彼らの行動は競合しない。だから、サムとサラは異なるエリアにいるため、サムは今昼食を続ける。\n",
+                "answer": "答案：<選択肢B>",
             }
         )
 
         def _status_des(a):
             event, loc = a.get_event(), ""
             if event.address:
-                loc = " 在 {} 的 {}".format(event.address[-2], event.address[-1])
+                loc = " （{} の {} で）".format(event.address[-2], event.address[-1])
             if not a.path:
-                return f"{a.name} 已经在 {event.get_describe(False)}{loc}"
-            return f"{a.name} 正要去 {event.get_describe(False)}{loc}"
+                return f"{a.name} は既に {event.get_describe(False)}{loc} している"
+            return f"{a.name} は {event.get_describe(False)}{loc} しようとしている"
 
         context = ". ".join(
             [c.describe for c in focus["events"]]
@@ -670,7 +755,7 @@ class Scratch:
         return {
             "prompt": prompt,
             "callback": _callback,
-            "failsafe": agent.name + " 正在看着 " + other_name,
+            "failsafe": agent.name + " が " + other_name + " を見ている",
         }
 
     def prompt_generate_chat(self, agent, other, relation, chats):
@@ -685,7 +770,7 @@ class Scratch:
             delta = utils.get_timer().get_delta(n.create)
             if delta > 480:
                 continue
-            pass_context += f"{delta} 分钟前，{agent.name} 和 {other.name} 进行过对话。{n.describe}\n"
+            pass_context += f"{delta} 分前、{agent.name} と {other.name} は会話をした。{n.describe}\n"
 
         address = agent.get_tile().get_address()
         if len(pass_context) > 0:
@@ -698,7 +783,7 @@ class Scratch:
 
         conversation = "\n".join(["{}: {}".format(n, u) for n, u in chats])
         conversation = (
-            conversation or "[对话尚未开始]"
+            conversation or "[会話はまだ開始されていない]"
         )
 
         prompt = self.build_prompt(
@@ -727,13 +812,13 @@ class Scratch:
         return {
             "prompt": prompt,
             "callback": _callback,
-            "failsafe": "嗯",
+            "failsafe": "うん",
         }
 
     def prompt_generate_chat_check_repeat(self, agent, chats, content):
         conversation = "\n".join(["{}: {}".format(n, u) for n, u in chats])
         conversation = (
-                conversation or "[对话尚未开始]"
+                conversation or "[会話はまだ開始されていない]"
         )
 
         prompt = self.build_prompt(
@@ -746,7 +831,7 @@ class Scratch:
         )
 
         def _callback(response):
-            if "No" in response or "no" in response or "否" in response or "不" in response:
+            if "No" in response or "no" in response or "いいえ" in response or "違う" in response or "違います" in response:
                 return False
             return True
 
@@ -766,9 +851,9 @@ class Scratch:
             return response.strip()
 
         if len(chats) > 1:
-            failsafe = "{} 和 {} 之间的普通对话".format(chats[0][0], chats[1][0])
+            failsafe = "{}と{}の普通の会話".format(chats[0][0], chats[1][0])
         else:
-            failsafe = "{} 说的话没有得到回应".format(chats[0][0])
+            failsafe = "{}の発言に返事がない".format(chats[0][0])
 
         return {
             "prompt": prompt,
@@ -866,7 +951,7 @@ class Scratch:
         return {
             "prompt": prompt,
             "callback": _callback,
-            "failsafe": f"{self.name} 进行了一次对话",
+            "failsafe": f"{self.name} 会話をした",
         }
 
     def prompt_reflect_chat_memory(self, chats):
@@ -887,7 +972,7 @@ class Scratch:
             "prompt": prompt,
             "callback": _callback,
             # "failsafe": f"{self.name} had a sonversation",
-            "failsafe": f"{self.name} 进行了一次对话",
+            "failsafe": f"{self.name} 会話をした",
         }
 
     def prompt_retrieve_plan(self, nodes):
@@ -938,7 +1023,7 @@ class Scratch:
         return {
             "prompt": prompt,
             "callback": _callback,
-            "failsafe": "{} 应该遵循昨天的日程".format(self.name),
+            "failsafe": "{}は昨日のスケジュールに従うべきだ".format(self.name),
         }
 
     def prompt_retrieve_currently(self, plan_note, thought_note):
@@ -960,8 +1045,10 @@ class Scratch:
 
         def _callback(response):
             pattern = [
-                "^状态: (.*)。",
-                "^状态: (.*)",
+                "^状態[:：] (.*)。",
+                "^状態[:：] (.*)",
+                "^状態(.*)。",
+                "^状態(.*)",
             ]
             return parse_llm_output(response, pattern)
 

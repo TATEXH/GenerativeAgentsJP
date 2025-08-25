@@ -30,7 +30,7 @@ def get_location(address):
     #     return None
 
     # 不需要显示address第一级（"the Ville"）
-    location = "，".join(address[1:])
+    location = "、".join(address[1:])
 
     return location
 
@@ -51,7 +51,7 @@ def insert_frame0(init_pos, movement, agent_name):
     movement[key][agent_name] = {
         "location": location,
         "movement": coord,
-        "description": "正在睡觉",
+        "description": "寝ています",
     }
     movement["description"][agent_name] = {
         "currently": json_data["currently"],
@@ -134,7 +134,7 @@ def generate_movement(checkpoints_folder, compressed_folder, compressed_file):
                     for chats in conversation[step_time]:
                         for persons, chat in chats.items():
                             persons_in_conversation.append(persons.split(" @ ")[0].split(" -> "))
-                            step_conversation += f"\n地点：{persons.split(' @ ')[1]}\n\n"
+                            step_conversation += f"\n場所：{persons.split(' @ ')[1]}\n\n"
                             for c in chat:
                                 agent = c[0]
                                 text = c[1]
@@ -153,7 +153,7 @@ def generate_movement(checkpoints_folder, compressed_folder, compressed_file):
                         movement = None
 
                     if moving:
-                        action = f"前往 {location}"
+                        action = f"{location}へ向かう"
                     elif movement is not None:
                         action = agent_data["action"]["event"]["describe"]
                         if len(action) < 1:
@@ -166,7 +166,7 @@ def generate_movement(checkpoints_folder, compressed_folder, compressed_file):
                                 break
 
                         # 针对睡觉和对话设置图标
-                        if "睡觉" in action:
+                        if "寝る" in action or "睡眠" in action:
                             action = "😴 " + action
                         elif had_conversation:
                             action = "💬 " + action
@@ -201,17 +201,17 @@ def generate_report(checkpoints_folder, compressed_folder, compressed_file):
             conversation = json.load(f)
 
     def extract_description():
-        markdown_content = "# 基础人设\n\n"
+        markdown_content = "# 基本キャラクター設定\n\n"
         for agent_name in personas:
             json_path = f"frontend/static/assets/village/agents/{agent_name}/agent.json"
             with open(json_path, "r", encoding="utf-8") as f:
                 json_data = json.load(f)
                 markdown_content += f"## {agent_name}\n\n"
-                markdown_content += f"年龄：{json_data['scratch']['age']}岁  \n"
-                markdown_content += f"先天：{json_data['scratch']['innate']}  \n"
-                markdown_content += f"后天：{json_data['scratch']['learned']}  \n"
-                markdown_content += f"生活习惯：{json_data['scratch']['lifestyle']}  \n"
-                markdown_content += f"当前状态：{json_data['currently']}\n\n"
+                markdown_content += f"年齢：{json_data['scratch']['age']}歳  \n"
+                markdown_content += f"先天的：{json_data['scratch']['innate']}  \n"
+                markdown_content += f"後天的：{json_data['scratch']['learned']}  \n"
+                markdown_content += f"生活習慣：{json_data['scratch']['lifestyle']}  \n"
+                markdown_content += f"現在の状態：{json_data['currently']}\n\n"
         return markdown_content
 
     def extract_action(json_data):
@@ -221,7 +221,7 @@ def generate_report(checkpoints_folder, compressed_folder, compressed_file):
             if agent_name not in last_state.keys():
                 last_state[agent_name] = {"currently": "", "location": "", "action": ""}
 
-            location = "，".join(agent_data["action"]["event"]["address"])
+            location = "、".join(agent_data["action"]["event"]["address"])
             action = agent_data["action"]["event"]["describe"]
 
             if location == last_state[agent_name]["location"] and action == last_state[agent_name]["action"]:
@@ -232,22 +232,22 @@ def generate_report(checkpoints_folder, compressed_folder, compressed_file):
 
             if len(markdown_content) < 1:
                 markdown_content = f"# {json_data['time']}\n\n"
-                markdown_content += "## 活动记录：\n\n"
+                markdown_content += "## 活動記録：\n\n"
 
             markdown_content += f"### {agent_name}\n"
 
             if len(action) < 1:
-                action = "睡觉"
+                action = "寝る"
 
             markdown_content += f"位置：{location}  \n"
-            markdown_content += f"活动：{action}  \n"
+            markdown_content += f"活動：{action}  \n"
 
             markdown_content += f"\n"
 
         if json_data['time'] not in conversation.keys():
             return markdown_content
 
-        markdown_content += "## 对话记录：\n\n"
+        markdown_content += "## 対話記録：\n\n"
         for chats in conversation[json_data['time']]:
             for agents, chat in chats.items():
                 markdown_content += f"### {agents}\n\n"

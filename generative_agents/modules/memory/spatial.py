@@ -9,9 +9,9 @@ class Spatial:
     def __init__(self, tree, address=None):
         self.tree = tree
         self.address = address or {}
-        if "sleeping" not in self.address and "睡觉" not in self.address and "living_area" in self.address:
+        if "sleeping" not in self.address and "睡眠" not in self.address and "living_area" in self.address:
             # self.address["sleeping"] = self.address["living_area"] + ["bed"]
-            self.address["睡觉"] = self.address["living_area"] + ["ベッド"]
+            self.address["睡眠"] = self.address["living_area"] + ["ベッド"]
 
     def __str__(self):
         return utils.dump_dict(self.tree)

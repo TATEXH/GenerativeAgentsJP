@@ -71,7 +71,7 @@ def create_io_logger(level: Union[str, int] = logging.INFO):
 
 
 def create_file_logger(
-    path: str, level: Union[str, int] = logging.INFO
+    path: str, level: Union[str, int] = logging.INFO, append: bool = True
 ) -> logging.Logger:
     """Create file logger
 
@@ -81,6 +81,8 @@ def create_file_logger(
         The logging level.
     path: str
         The file path.
+    append: bool
+        If True, append to existing file. If False, overwrite existing file.
 
     Returns
     -------
@@ -113,8 +115,10 @@ def create_file_logger(
     formatter = logging.Formatter(
         "%(asctime)s %(filename)s[ln:%(lineno)d]<%(levelname)s> %(message)s"
     )
+    # appendフラグに基づいてモードを決定
+    file_mode = "a" if append else "w"
     handlers = [
-        logging.FileHandler(path, mode="a", encoding=None, delay=False),
+        logging.FileHandler(path, mode=file_mode, encoding=None, delay=False),
         logging.StreamHandler(),
     ]
     for handler in handlers:

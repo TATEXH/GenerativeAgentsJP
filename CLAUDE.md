@@ -107,6 +107,36 @@ Available simulations after compression:
 - `--step`: Number of simulation steps to run
 - `--stride`: Minutes per simulation step (default: 10)
 - `--resume`: Continue from last checkpoint
+- `--agents`: Number of agents or comma-separated agent names (default: all 25 agents)
+- `--poignancy`: Poignancy threshold for reflection (default: 150)
+
+### Advanced Simulation Control
+
+For testing or focused simulations, you can:
+
+**Limit number of agents:**
+```bash
+# Run with only 3 agents
+python start.py --name test-sim --agents 3 --start "20250213-09:30" --step 5
+
+# Run with specific agents by name
+python start.py --name test-sim --agents "あいか,けんじ,まりあ" --start "20250213-09:30" --step 5
+```
+
+**Adjust reflection sensitivity:**
+```bash
+# Lower poignancy threshold (agents reflect more frequently)
+python start.py --name test-sim --poignancy 50 --start "20250213-09:30" --step 5
+
+# Higher poignancy threshold (agents reflect less frequently) 
+python start.py --name test-sim --poignancy 200 --start "20250213-09:30" --step 5
+```
+
+**Combined for focused testing:**
+```bash
+# Small group simulation with frequent reflection
+python start.py --name focused-test --agents 2 --poignancy 30 --start "20250213-09:30" --step 3
+```
 
 ## Development Notes
 

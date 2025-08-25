@@ -22,7 +22,7 @@ personas = [
 
 
 class SimulateServer:
-    def __init__(self, name, static_root, checkpoints_folder, config, start_step=0, verbose="info", log_file=""):
+    def __init__(self, name, static_root, checkpoints_folder, config, start_step=0, verbose="info", log_file="", resume=False):
         self.name = name
         self.static_root = static_root
         self.checkpoints_folder = checkpoints_folder
@@ -41,7 +41,9 @@ class SimulateServer:
             conversation = {}
 
         if len(log_file) > 0:
-            self.logger = utils.create_file_logger(f"{checkpoints_folder}/{log_file}", verbose)
+            # resumeの場合は追記モード、新規の場合は新規作成
+            append_mode = resume
+            self.logger = utils.create_file_logger(f"{checkpoints_folder}/{log_file}", verbose, append=append_mode)
         else:
             self.logger = utils.create_io_logger(verbose)
 
@@ -258,6 +260,9 @@ if __name__ == "__main__":
         start_step = 0
 
     static_root = "frontend/static"
+    
+    # ログファイル名のデフォルト設定
+    log_file = args.log if args.log else "debug.log"
 
-    server = SimulateServer(name, static_root, checkpoints_folder, sim_config, start_step, args.verbose, args.log)
+    server = SimulateServer(name, static_root, checkpoints_folder, sim_config, start_step, args.verbose, log_file, resume)
     server.simulate(args.step, args.stride)
