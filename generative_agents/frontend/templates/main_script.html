@@ -31,6 +31,16 @@
 
 	let finished = false;
 	let paused = false;
+	let slider_dragging = false;
+	let manual_time_change = false;
+
+	// Calculate total steps from all_movement data (excluding special keys)
+	let total_steps = 0;
+	for (let key in all_movement) {
+		if (key !== "description" && key !== "conversation" && !isNaN(parseInt(key))) {
+			total_steps = Math.max(total_steps, parseInt(key));
+		}
+	}
 
 	// Phaser configuration
 	const config = {
@@ -192,7 +202,53 @@
 		// Show current time
 		currentTime = add_text(this, posX, posY, "", "#ccffcc");
 
-		// Show conversation content
+		// Add time slider container
+		let sliderContainer = document.createElement('div');
+		sliderContainer.id = 'time-slider-container';
+		sliderContainer.style.cssText = `
+			position: fixed;
+			top: 20px;
+			right: 20px;
+			z-index: 1000;
+			background-color: rgba(204, 255, 204, 0.9);
+			padding: 10px;
+			border-radius: 5px;
+			font-family: serif;
+			font-size: 14px;
+			border: 2px solid #99cc99;
+		`;
+		
+		let sliderLabel = document.createElement('div');
+		sliderLabel.textContent = '時間:';
+		sliderLabel.style.marginBottom = '5px';
+		
+		let sliderWrapper = document.createElement('div');
+		sliderWrapper.style.display = 'flex';
+		sliderWrapper.style.alignItems = 'center';
+		sliderWrapper.style.gap = '10px';
+		
+		let timeSlider = document.createElement('input');
+		timeSlider.type = 'range';
+		timeSlider.id = 'time-slider';
+		timeSlider.min = '1';
+		timeSlider.max = total_steps.toString();
+		timeSlider.value = step.toString();
+		timeSlider.style.width = '300px';
+		
+		let stepDisplay = document.createElement('span');
+		stepDisplay.id = 'step-display';
+		stepDisplay.textContent = `${step}/${total_steps}`;
+		stepDisplay.style.minWidth = '80px';
+		stepDisplay.style.fontSize = '12px';
+		
+		sliderWrapper.appendChild(timeSlider);
+		sliderWrapper.appendChild(stepDisplay);
+		sliderContainer.appendChild(sliderLabel);
+		sliderContainer.appendChild(sliderWrapper);
+		
+		document.body.appendChild(sliderContainer);
+
+		// Show conversation content  
 		textConversation = add_text(this, 20, posY + currentTime.height + 10, " —— ", "#ccffcc");
 
 		// Setup camera
@@ -271,6 +327,92 @@
 				repeat: -1
 			});
 		}
+
+		// Time slider event handlers
+		timeSlider.addEventListener('input', function(e) {
+			slider_dragging = true;
+			let newStep = parseInt(e.target.value);
+			updateStepDisplay(newStep);
+		});
+
+		timeSlider.addEventListener('change', function(e) {
+			let newStep = parseInt(e.target.value);
+			jumpToStep(newStep);
+			slider_dragging = false;
+		});
+
+		// Function to update step display
+		function updateStepDisplay(currentStep) {
+			document.getElementById('step-display').textContent = `${currentStep}/${total_steps}`;
+		}
+
+		// Function to jump to specific step
+		function jumpToStep(newStep) {
+			if (newStep < 1 || newStep > total_steps) return;
+			
+			manual_time_change = true;
+			step = newStep;
+			execute_count = execute_count_max;
+			
+			// Update time based on step
+			let stepDifference = newStep - {{ step|tojson }};
+			start_datetime = new Date(Date.parse({{ start_datetime|tojson }}));
+			start_datetime.setTime(start_datetime.getTime() + (stepDifference * step_size));
+			
+			// Reset agent positions to the new step
+			updateAgentPositions(newStep);
+			updateConversationDisplay(newStep);
+			updateStepDisplay(newStep);
+			
+			manual_time_change = false;
+		}
+
+		// Function to update agent positions for a specific step
+		function updateAgentPositions(targetStep) {
+			if (!(targetStep in all_movement)) return;
+			
+			for (let persona_name in personas) {
+				let cleanName = persona_name.replace("_", " ");
+				if (cleanName in all_movement[targetStep]) {
+					let curr_x = all_movement[targetStep][cleanName]["movement"][0];
+					let curr_y = all_movement[targetStep][cleanName]["movement"][1];
+					let action = all_movement[targetStep][cleanName]["action"];
+					
+					// Update sprite position
+					personas[persona_name].body.x = curr_x * tile_width;
+					personas[persona_name].body.y = curr_y * tile_width;
+					movement_target[persona_name] = [curr_x * tile_width, curr_y * tile_width];
+					
+					// Update action display
+					let act = action;
+					act = act.length > 25 ? act.substring(0, 20)+"..." : act;
+					pronunciatios[persona_name].setText(persona_name + ": " + act);
+					pronunciatios[persona_name].x = personas[persona_name].body.x - 15;
+					pronunciatios[persona_name].y = personas[persona_name].body.y - 15 - 25;
+					
+					// Update status info
+					document.getElementById("agent_desc__"+persona_name).innerHTML = all_movement["description"][persona_name]["currently"];
+					document.getElementById("current_action__"+persona_name).innerHTML = action;
+					document.getElementById("target_address__"+persona_name).innerHTML = all_movement[targetStep][cleanName]["location"];
+				}
+			}
+		}
+
+		// Function to update conversation display for a specific step
+		function updateConversationDisplay(targetStep) {
+			let curr_datetime = new Date(start_datetime.getTime());
+			let curr_year = curr_datetime.getFullYear().toString().padStart(4, "0");
+			let curr_month = (curr_datetime.getMonth() + 1).toString().padStart(2, "0");
+			let curr_day = curr_datetime.getDate().toString().padStart(2, "0");
+			let curr_hour = curr_datetime.getHours().toString().padStart(2, "0");
+			let curr_minute = curr_datetime.getMinutes().toString().padStart(2, "0");
+			let conversation_key = `${curr_year}${curr_month}${curr_day}-${curr_hour}:${curr_minute}`;
+			
+			let conversation_key_text = all_movement["conversation"][conversation_key];
+			if (conversation_key_text && conversation_key_text != "") {
+				textConversation.setText(`\n${conversation_key} 対話記録：\n` + conversation_key_text);
+			}
+		}
 	}
 
 	// Update function
@@ -325,8 +467,17 @@
 			document.getElementById("temp_focus").innerHTML = "";
 		}
 
-		if (finished || paused) {
+		if (finished || paused || slider_dragging) {
 			return;
+		}
+
+		// Update slider position during automatic playback (not manual changes)
+		if (!manual_time_change) {
+			let timeSlider = document.getElementById('time-slider');
+			if (timeSlider) {
+				timeSlider.value = step;
+				document.getElementById('step-display').textContent = `${step}/${total_steps}`;
+			}
 		}
 
 		curr_datetime = new Date(start_datetime.getTime());

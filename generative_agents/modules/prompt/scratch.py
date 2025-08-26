@@ -53,8 +53,8 @@ class Scratch:
 
         def _callback(response):
             pattern = [
-                "評価[:： ]+(\d{1,2})",
-                "(\d{1,2})",
+                r"評価[:： ]+(\d{1,2})",
+                r"(\d{1,2})",
             ]
             return int(parse_llm_output(response, pattern, "match_last"))
 
@@ -76,8 +76,8 @@ class Scratch:
 
         def _callback(response):
             pattern = [
-                "評価[:： ]+(\d{1,2})",
-                "(\d{1,2})",
+                r"評価[:： ]+(\d{1,2})",
+                r"(\d{1,2})",
             ]
             return int(parse_llm_output(response, pattern, "match_last"))
 
@@ -99,9 +99,9 @@ class Scratch:
 
         def _callback(response):
             patterns = [
-                "(\d{1,2}):00",
-                "(\d{1,2})",
-                "\d{1,2}",
+                r"(\d{1,2}):00",
+                r"(\d{1,2})",
+                r"\d{1,2}",
             ]
             wake_up_time = int(parse_llm_output(response, patterns))
             if wake_up_time > 11:
@@ -123,10 +123,10 @@ class Scratch:
 
         def _callback(response):
             patterns = [
-                "\d{1,2}\. (.*)。",
-                "\d{1,2}\. (.*)",
-                "\d{1,2}\) (.*)。",
-                "\d{1,2}\) (.*)",
+                r"\d{1,2}\. (.*)。",
+                r"\d{1,2}\. (.*)",
+                r"\d{1,2}\) (.*)。",
+                r"\d{1,2}\) (.*)",
                 "(.*)。",
                 "(.*)",
             ]
@@ -183,10 +183,10 @@ class Scratch:
 
         def _callback(response):
             patterns = [
-                "\[(\d{1,2}:\d{2})\] " + self.name + "(.*)。",
-                "\[(\d{1,2}:\d{2})\] " + self.name + "(.*)",
-                "\[(\d{1,2}:\d{2})\] " + "(.*)。",
-                "\[(\d{1,2}:\d{2})\] " + "(.*)",
+                r"\[(\d{1,2}:\d{2})\] " + self.name + r"(.*)。",
+                r"\[(\d{1,2}:\d{2})\] " + self.name + r"(.*)",
+                r"\[(\d{1,2}:\d{2})\] " + r"(.*)。",
+                r"\[(\d{1,2}:\d{2})\] " + r"(.*)",
             ]
             outputs = parse_llm_output(response, patterns, mode="match_all")
             assert len(outputs) >= 5, "less than 5 schedules"
@@ -525,8 +525,8 @@ class Scratch:
                     continue
 
                 patterns = [
-                    "[\(（]<(.+?)>[,， ]+<(.+?)>[,， ]+<(.*)>[\)）]",
-                    "[\(（](.+?)[,， ]+(.+?)[,， ]+(.*)[\)）]",
+                    r"[\(（]<(.+?)>[,， ]+<(.+?)>[,， ]+<(.*)>[\)）]",
+                    r"[\(（](.+?)[,， ]+(.+?)[,， ]+(.*)[\)）]",
                 ]
                 outputs = parse_llm_output(response, patterns)
                 if len(outputs) == 3:
@@ -905,7 +905,7 @@ class Scratch:
         )
 
         def _callback(response):
-            pattern = ["^\d{1}\. (.*)", "^\d{1}\) (.*)", "^\d{1} (.*)"]
+            pattern = [r"^\d{1}\. (.*)", r"^\d{1}\) (.*)", r"^\d{1} (.*)"]
             return parse_llm_output(response, pattern, mode="match_all")
 
         return {
@@ -1025,10 +1025,10 @@ class Scratch:
 
         def _callback(response):
             pattern = [
-                "^\d{1,2}\. (.*)。",
-                "^\d{1,2}\. (.*)",
-                "^\d{1,2}\) (.*)。",
-                "^\d{1,2}\) (.*)",
+                r"^\d{1,2}\. (.*)。",
+                r"^\d{1,2}\. (.*)",
+                r"^\d{1,2}\) (.*)。",
+                r"^\d{1,2}\) (.*)",
             ]
             return parse_llm_output(response, pattern, mode="match_all")
 
