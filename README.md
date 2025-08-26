@@ -2,7 +2,8 @@
 
 # 生成エージェント（Generative Agents）日本語ローカライズ版
 
-こちらはGenerativeAgentCN(https://github.com/x-glacier/GenerativeAgentsCN)を中国語から日本語にローカライズしたものです。
+こちらはGenerativeAgentCNを中国語から日本語にローカライズしたものです。
+GenerativeAgentCN(https://github.com/x-glacier/GenerativeAgentsCN)
 
 
 主な作業内容：
