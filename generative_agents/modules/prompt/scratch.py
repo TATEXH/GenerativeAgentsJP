@@ -554,7 +554,8 @@ class Scratch:
             # オブジェクト名を正規表現用にエスケープ
             escaped_obj = re.escape(obj)
             
-            patterns = [
+            # まず元のオブジェクト名でマッチを試みる
+            patterns_specific = [
                 # 標準パターン（山括弧あり、半角コロン）
                 f"出力：<{escaped_obj}>: (.*)。?",
                 f"出力：<{escaped_obj}>: (.*)",
@@ -595,10 +596,43 @@ class Scratch:
                 f"出力：<{escaped_obj}>(.*)。?",
                 f"出力：<{escaped_obj}>(.*)",
             ]
-            result = parse_llm_output(response, patterns)
-            # 結果を完全な形式で返す
-            if result:
-                return f"<{obj}>: {result}"
+            
+            result = parse_llm_output(response, patterns_specific)
+            
+            # 特定のオブジェクト名でマッチしなかった場合、汎用パターンを試す
+            if not result:
+                patterns_generic = [
+                    # 汎用パターン（任意のオブジェクト名を許可）
+                    r"出力：<[^>]+>:\s*(.*)。?",
+                    r"出力：<[^>]+>:\s*(.*)",
+                    r"出力：<[^>]+>:(.*)。?",
+                    r"出力：<[^>]+>:(.*)",
+                    r"<[^>]+>:\s*(.*)。?",
+                    r"<[^>]+>:\s*(.*)",
+                    r"<[^>]+>:(.*)。?",
+                    r"<[^>]+>:(.*)",
+                    # 全角コロン版
+                    r"出力：<[^>]+>：\s*(.*)。?",
+                    r"出力：<[^>]+>：\s*(.*)",
+                    r"出力：<[^>]+>：(.*)。?",
+                    r"出力：<[^>]+>：(.*)",
+                    r"<[^>]+>：\s*(.*)。?",
+                    r"<[^>]+>：\s*(.*)",
+                    r"<[^>]+>：(.*)。?",
+                    r"<[^>]+>：(.*)",
+                    # 最終フォールバック - コロンの後の内容を取得
+                    r"[:：]\s*([^<>\n]+?)(?:。|$)",
+                ]
+                result = parse_llm_output(response, patterns_generic)
+                if result:
+                    print(f"[DEBUG] Used generic pattern to extract: {result}")
+            
+            # 結果を完全な形式で返す（常に元のオブジェクト名を使用）
+            if result and result.strip():
+                return f"<{obj}>: {result.strip()}"
+            
+            # パターンマッチに失敗した場合
+            print(f"[DEBUG] No pattern matched for object '{obj}' in response: {response[:200]}")
             return f"<{obj}>: 不明"
 
         return {"prompt": prompt, "callback": _callback, "failsafe": "空いている"}
