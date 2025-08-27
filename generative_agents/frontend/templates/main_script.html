@@ -14,6 +14,10 @@
 	let datetime_options = { weekday: "long", year: "numeric", month: "long", day: "numeric" };
 	let start_datetime = new Date(Date.parse({{ start_datetime|tojson }}));
 
+	// UI element variables (declared before use)
+	let buttonPlay, buttonPause, buttonShowConversation, buttonHideConversation, buttonDetailConversation;
+	let currentTime, textConversation;
+
 	// Persona related variables
 	let persona_names = {{ persona_init_pos|tojson }};
 	var spawn_tile_loc = {};
@@ -33,6 +37,10 @@
 	let paused = false;
 	let slider_dragging = false;
 	let manual_time_change = false;
+	let conversation_bubbles = [];  // Store conversation bubble sprites
+	let show_conversations = true;  // Toggle for showing conversation bubbles
+	let last_conversation_text = "";  // Track last conversation to avoid unnecessary updates
+	let conversation_display_timer = 0;  // Timer to control bubble updates
 
 	// Calculate total steps from all_movement data (excluding special keys)
 	let total_steps = 0;
@@ -98,7 +106,7 @@
 		// Load tilemap JSON
 		this.load.tilemapTiledJSON("map", "static/assets/village/tilemap/tilemap.json");
 
-		this.load.atlas("atlas", "static/assets/village/agents/伊莎贝拉/texture.png", filename="static/assets/village/agents/sprite.json");
+		this.load.atlas("atlas", "static/assets/village/agents/いずみ/texture.png", filename="static/assets/village/agents/sprite.json");
 
 		// Load persona atlases
 		for (var p in persona_names) {
@@ -198,6 +206,10 @@
 		buttonHideConversation = add_text(this, posX, posY, " 対話非表示 ", "#ffffcc");
 		buttonHideConversation.setInteractive();
 		posX += buttonHideConversation.width + 10;
+		
+		buttonDetailConversation = add_text(this, posX, posY, " 詳細表示 ", "#ffffcc");
+		buttonDetailConversation.setInteractive();
+		posX += buttonDetailConversation.width + 10;
 
 		// Show current time
 		currentTime = add_text(this, posX, posY, "", "#ccffcc");
@@ -250,6 +262,7 @@
 
 		// Show conversation content  
 		textConversation = add_text(this, 20, posY + currentTime.height + 10, " —— ", "#ccffcc");
+		textConversation.setVisible(false);  // Initially hide large conversation box
 
 		// Setup camera
 		player = this.physics.add.sprite(2440, 500, "atlas", "down").setSize(30, 40).setOffset(0, 0);
@@ -411,6 +424,130 @@
 			let conversation_key_text = all_movement["conversation"][conversation_key];
 			if (conversation_key_text && conversation_key_text != "") {
 				textConversation.setText(`\n${conversation_key} 対話記録：\n` + conversation_key_text);
+				
+				// Update small conversation bubbles
+				updateConversationBubbles(conversation_key_text);
+			} else {
+				// Clear conversation bubbles if no conversation and timer expired
+				updateConversationBubbles(""); // Pass empty string to handle timer
+			}
+		}
+		
+		// Function to parse conversation text and extract participants
+		function parseConversations(conversationText) {
+			let conversations = [];
+			let lines = conversationText.split('\n');
+			let currentConv = null;
+			
+			for (let line of lines) {
+				if (line.startsWith('場所：')) {
+					if (currentConv) {
+						conversations.push(currentConv);
+					}
+					currentConv = {
+						location: line.replace('場所：', '').trim(),
+						participants: [],
+						messages: []
+					};
+				} else if (line.includes('：') && currentConv) {
+					let [speaker, message] = line.split('：');
+					speaker = speaker.trim();
+					message = message.trim();
+					
+					if (speaker && message) {
+						if (!currentConv.participants.includes(speaker)) {
+							currentConv.participants.push(speaker);
+						}
+						currentConv.messages.push({speaker, message});
+						
+						// Keep only last 3 messages for bubble display
+						if (currentConv.messages.length > 3) {
+							currentConv.messages.shift();
+						}
+					}
+				}
+			}
+			
+			if (currentConv) {
+				conversations.push(currentConv);
+			}
+			
+			return conversations;
+		}
+		
+		// Function to clear all conversation bubbles
+		function clearConversationBubbles() {
+			for (let bubble of conversation_bubbles) {
+				if (bubble && bubble.destroy) {
+					bubble.destroy();
+				}
+			}
+			conversation_bubbles = [];
+		}
+		
+		// Function to update conversation bubbles
+		function updateConversationBubbles(conversationText) {
+			// Clear existing bubbles
+			clearConversationBubbles();
+			
+			if (!show_conversations) return;
+			
+			// Parse conversations
+			let conversations = parseConversations(conversationText);
+			
+			// Create bubble for each conversation (max 3)
+			for (let i = 0; i < Math.min(conversations.length, 3); i++) {
+				let conv = conversations[i];
+				
+				// Calculate center position of participants
+				let centerX = 0, centerY = 0;
+				let validParticipants = 0;
+				
+				for (let participant of conv.participants) {
+					if (personas[participant]) {
+						centerX += personas[participant].body.x;
+						centerY += personas[participant].body.y;
+						validParticipants++;
+					}
+				}
+				
+				if (validParticipants > 0) {
+					centerX /= validParticipants;
+					centerY /= validParticipants;
+					
+					// Create bubble content
+					let bubbleText = `📍${conv.location}\n`;
+					for (let msg of conv.messages) {
+						let displayMsg = msg.message;
+						if (displayMsg.length > 20) {
+							displayMsg = displayMsg.substring(0, 18) + '...';
+						}
+						bubbleText += `${msg.speaker}: ${displayMsg}\n`;
+					}
+					
+					// Create bubble sprite
+					let bubble = game.scene.scenes[0].add.text(
+						centerX,
+						centerY - 80 - (i * 100), // Offset for multiple bubbles
+						bubbleText.trim(),
+						{
+							font: "12px monospace",
+							fill: "#333333",
+							backgroundColor: "rgba(255, 255, 255, 0.95)",
+							padding: { x: 8, y: 6 },
+							wordWrap: { width: 250, useAdvancedWrap: true },
+							align: "left",
+							stroke: "#cccccc",
+							strokeThickness: 1,
+						}
+					);
+					
+					bubble.setDepth(4);
+					bubble.setOrigin(0.5, 1);
+					bubble.setShadow(2, 2, 'rgba(0,0,0,0.2)', 4);
+					
+					conversation_bubbles.push(bubble);
+				}
 			}
 		}
 	}
@@ -435,13 +572,30 @@
 		buttonShowConversation.on("pointerdown", function() {
 			buttonShowConversation.text = "[対話表示]";
 			buttonHideConversation.text = " 対話非表示 ";
-			textConversation.setVisible(true);
+			show_conversations = true;
+			textConversation.setVisible(false);  // Hide large text box, show bubbles
+			// Re-update conversation bubbles
+			if (conversation_key_text && conversation_key_text != "") {
+				updateConversationBubbles(conversation_key_text);
+			}
 		});
 
 		buttonHideConversation.on("pointerdown", function() {
 			buttonShowConversation.text = " 対話表示 ";
 			buttonHideConversation.text = "[対話非表示]";
+			buttonDetailConversation.text = " 詳細表示 ";
+			show_conversations = false;
 			textConversation.setVisible(false);
+			clearConversationBubbles();
+		});
+		
+		buttonDetailConversation.on("pointerdown", function() {
+			buttonShowConversation.text = " 対話表示 ";
+			buttonHideConversation.text = " 対話非表示 ";
+			buttonDetailConversation.text = "[詳細表示]";
+			show_conversations = false;
+			clearConversationBubbles();
+			textConversation.setVisible(true);  // Show large text box
 		});
 
 		// Move camera
@@ -490,6 +644,11 @@
 		conversation_key_text = all_movement["conversation"][conversation_key];
 		if (conversation_key_text && conversation_key_text != "") {
 			textConversation.setText(`\n${conversation_key} 対話記録：\n` + conversation_key_text);
+			// Update small conversation bubbles
+			updateConversationBubbles(conversation_key_text);
+		} else {
+			// Clear conversation bubbles if no conversation and timer expired
+			updateConversationBubbles(""); // Pass empty string to handle timer
 		}
 
 		// Moving personas
@@ -589,5 +748,157 @@
 		}
 
 		execute_count -= 1;
+	}
+
+	// Parse conversation text to extract conversations
+	function parseConversations(conversationText) {
+		if (!conversationText || conversationText.trim() === "") return [];
+		
+		let conversations = [];
+		let lines = conversationText.split('\n');
+		let currentConv = null;
+		
+		for (let line of lines) {
+			line = line.trim();
+			if (line.startsWith('場所：')) {
+				if (currentConv) {
+					conversations.push(currentConv);
+				}
+				currentConv = {
+					location: line.replace('場所：', ''),
+					participants: [],
+					messages: []
+				};
+			} else if (line.includes('：') && currentConv) {
+				let parts = line.split('：');
+				let speaker = parts[0].trim();
+				let message = parts.slice(1).join('：').trim();
+				
+				if (!currentConv.participants.includes(speaker)) {
+					currentConv.participants.push(speaker);
+				}
+				currentConv.messages.push({speaker: speaker, message: message});
+			}
+		}
+		
+		if (currentConv) {
+			conversations.push(currentConv);
+		}
+		
+		return conversations;
+	}
+
+	// Clear all conversation bubble sprites
+	function clearConversationBubbles() {
+		for (let bubble of conversation_bubbles) {
+			if (bubble && bubble.destroy) {
+				bubble.destroy();
+			}
+		}
+		conversation_bubbles = [];
+	}
+
+	// Update conversation bubbles display
+	function updateConversationBubbles(conversationText) {
+		// If same conversation and timer hasn't expired, keep current bubbles
+		if (conversationText === last_conversation_text && conversation_display_timer > 0) {
+			conversation_display_timer--;
+			return; // Keep existing bubbles, don't recreate
+		}
+		
+		// If empty conversation text but timer still active, keep bubbles
+		if (!conversationText && conversation_display_timer > 0) {
+			conversation_display_timer--;
+			return; // Keep existing bubbles
+		}
+		
+		// Update timer and conversation text for new conversations
+		if (conversationText !== last_conversation_text) {
+			conversation_display_timer = conversationText ? 500 : 0; // Only set timer for non-empty conversations
+			last_conversation_text = conversationText;
+		}
+		
+		// Only clear and recreate bubbles for new conversations or when timer expires
+		clearConversationBubbles();
+		
+		if (!show_conversations) return;
+		
+		// Parse conversations
+		let conversations = parseConversations(conversationText);
+		
+		// Create bubble for each conversation (max 3)
+		for (let i = 0; i < Math.min(conversations.length, 3); i++) {
+			let conv = conversations[i];
+			
+			// Calculate center position of participants
+			let centerX = 0, centerY = 0;
+			let validParticipants = 0;
+			
+			for (let participant of conv.participants) {
+				if (personas[participant]) {
+					centerX += personas[participant].body.x;
+					centerY += personas[participant].body.y;
+					validParticipants++;
+				}
+			}
+			if (validParticipants > 0) {
+				centerX = (centerX / validParticipants) + 16; // Offset to center of sprite
+				centerY = (centerY / validParticipants) - 60; // Above the sprites
+				
+				// Create conversation bubble text
+				// Split location by comma and show only last 2 parts
+				let locationParts = conv.location.split('，');
+				let shortLocation = locationParts.slice(-2).join('，');
+				let bubbleText = `${shortLocation}\n`; // Location on first line
+				
+				// Calculate the maximum line length for dynamic width
+				let maxLineLength = shortLocation.length;
+				for (let msg of conv.messages.slice(0, 2)) { // Show max 2 messages
+					let shortMsg = msg.message.length > 60 ? msg.message.substring(0, 60) + "..." : msg.message;
+					let lineText = `${msg.speaker}：${shortMsg}`;
+					bubbleText += `${lineText}\n`; // Speaker and message on same line
+					maxLineLength = Math.max(maxLineLength, lineText.length);
+				}
+				
+				// Calculate dynamic width based on text length (approximately 30px per character for 18px font)
+				let dynamicWidth = Math.max(400, maxLineLength * 30);
+				
+				// Debug output
+				console.log("Bubble Debug:");
+				console.log("- bubbleText:", bubbleText);
+				console.log("- maxLineLength:", maxLineLength);
+				console.log("- dynamicWidth:", dynamicWidth);
+				
+				// Create background rectangle first
+				let background = game.scene.scenes[0].add.graphics();
+				background.fillStyle(0xffffcc, 0.9); // Light yellow background
+				background.fillRoundedRect(centerX - dynamicWidth/2, centerY - 50, dynamicWidth, 100, 8);
+				background.setDepth(14);
+				background.setScrollFactor(1);
+				
+				// Create text without background
+				let textObj = game.scene.scenes[0].add.text(
+					centerX, centerY, bubbleText,
+					{
+						font: "18px serif",
+						fill: "#000000",
+						align: "left",
+						wordWrap: { width: dynamicWidth - 24, useAdvancedWrap: false }
+					}
+				);
+				
+				textObj.setOrigin(0.5, 0.5); // Center the text
+				textObj.setDepth(15);
+				textObj.setScrollFactor(1);
+				
+				// Debug actual sizes
+				console.log("- background width:", dynamicWidth);
+				console.log("- text width:", textObj.width);
+				console.log("- text displayWidth:", textObj.displayWidth);
+				
+				conversation_bubbles.push(background);
+				conversation_bubbles.push(textObj);
+			}
+		}
 	}
 </script>
