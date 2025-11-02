@@ -8,7 +8,7 @@ GenerativeAgentCN(https://github.com/x-glacier/GenerativeAgentsCN)
 
 主な作業内容：
 
-  - 含まれる中国語を日本語に翻訳。ollamaのgpt-oss:20bモデルで動くようにしました。
+  - 含まれる中国語を日本語に翻訳。Ollamaのgpt-oss:20b（推奨）、qwen3:14bモデルで動作確認済みです。
   - LLMの出力の曖昧さによってパース時にエラーが出るのを修正しました。
   - replay画面にタイムスライダーを付けて時間の変更をできるようにしました。
   - シミュレーション時にエージェントの人数の変更、内省の閾値の変更ができるようになりました。
