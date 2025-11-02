@@ -22,8 +22,8 @@ Modify the configuration file `generative_agents/data/config.json`:
 Use a virtual environment, e.g. with anaconda3:
 
 ```
-conda create -n generative_agents_cn python=3.12
-conda activate generative_agents_cn
+conda create -n generative_agents_jp python=3.12
+conda activate generative_agents_jp
 ```
 
 Install dependencies:
