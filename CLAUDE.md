@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Chinese localized implementation of Generative Agents - a virtual world simulation with 25 AI-powered agents that simulate realistic human behavior. The project is based on the Stanford/Google Generative Agents research but rebuilt with better engineering practices and Chinese language support.
+This is a Japanese localized implementation of Generative Agents - a virtual world simulation with 25 AI-powered agents that simulate realistic human behavior. The project is based on the Stanford/Google Generative Agents research but rebuilt with better engineering practices and Japanese language support.
 
 ## Core Architecture
 
@@ -19,7 +19,7 @@ This is a Chinese localized implementation of Generative Agents - a virtual worl
   - `spatial.py`: Location-based memory
   - `schedule.py`: Daily planning and task scheduling
 - **LLM Integration** (`modules/model/llm_model.py`): Supports both Ollama and OpenAI-compatible APIs
-- **Prompt Templates** (`data/prompts/`): All Chinese prompt templates for agent behaviors
+- **Prompt Templates** (`data/prompts/`): All Japanese prompt templates for agent behaviors
 
 ### Configuration
 
@@ -31,7 +31,7 @@ All configuration is centralized in `generative_agents/data/config.json`:
 ### Data Flow
 
 1. Agents perceive their environment through vision radius and attention bandwidth
-2. LLM processes perceptions using Chinese prompts to generate actions/dialogue
+2. LLM processes perceptions using Japanese prompts to generate actions/dialogue
 3. Memory systems store experiences using vector embeddings
 4. Game engine updates world state and agent positions
 5. Results are checkpointed for replay functionality
@@ -40,18 +40,18 @@ All configuration is centralized in `generative_agents/data/config.json`:
 
 **ALWAYS activate the conda environment before running any Python commands:**
 ```bash
-source /root/miniconda3/etc/profile.d/conda.sh && conda activate generative_agents_cn
+conda activate generative_agents_jp
 ```
 
-This project requires the `generative_agents_cn` conda environment which has all necessary dependencies installed.
+This project requires the `generative_agents_jp` conda environment which has all necessary dependencies installed.
 
 ## Common Commands
 
 ### Environment Setup
 ```bash
 # Create conda environment
-conda create -n generative_agents_cn python=3.12
-conda activate generative_agents_cn
+conda create -n generative_agents_jp python=3.12
+conda activate generative_agents_jp
 
 # Install dependencies
 pip install -r requirements.txt
@@ -60,7 +60,7 @@ pip install -r requirements.txt
 ### Running Simulation
 ```bash
 # ALWAYS activate conda environment first
-source /root/miniconda3/etc/profile.d/conda.sh && conda activate generative_agents_cn
+conda activate generative_agents_jp
 cd generative_agents
 
 # Start new simulation
@@ -75,7 +75,7 @@ python start.py --name sim-test --resume --step 10 --stride 10
 #### Step 1: Compress Simulation Data
 ```bash
 # ALWAYS activate conda environment first
-source /root/miniconda3/etc/profile.d/conda.sh && conda activate generative_agents_cn
+conda activate generative_agents_jp
 cd generative_agents
 
 # Generate replay data (required before viewing replay)
@@ -85,8 +85,8 @@ python compress.py --name <simulation-name>
 
 #### Step 2: Start Replay Server
 ```bash
-# ALWAYS activate conda environment first  
-source /root/miniconda3/etc/profile.d/conda.sh && conda activate generative_agents_cn
+# ALWAYS activate conda environment first
+conda activate generative_agents_jp
 
 # Start replay server (runs on port 5000)
 python replay.py
@@ -143,10 +143,10 @@ python start.py --name focused-test --agents 2 --poignancy 30 --start "20250213-
 ### LLM Configuration
 - Default: Uses Ollama with local models (qwen3:8b, bge-m3 embeddings)
 - Alternative: Set `provider: "openai"` for OpenAI-compatible APIs
-- Models must support Chinese language for proper agent behavior
+- Models must support Japanese language for proper agent behavior
 
 ### Adding New Agents
-- Agent personas defined in `start.py` personas list (Chinese names)
+- Agent personas defined in `start.py` personas list (Japanese names)
 - Agent data stored in `frontend/static/assets/village/agents/`
 - Each agent needs: `agent.json`, `portrait.png`, `texture.png`
 
@@ -164,7 +164,7 @@ python start.py --name focused-test --agents 2 --poignancy 30 --start "20250213-
 
 ### Prompt Engineering
 - All prompts in `data/prompts/` directory
-- Templates use Chinese language optimized for local models
+- Templates use Japanese language optimized for local models
 - Key prompts: daily scheduling, conversation, reflection, action planning
 - Handles special model outputs (e.g., <think> tags from newer models)
 

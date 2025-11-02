@@ -5,7 +5,7 @@
 ### Code Quality Checks
 1. **Environment Activation**: Ensure conda environment is activated
    ```bash
-   source /root/miniconda3/etc/profile.d/conda.sh && conda activate generative_agents_cn
+   conda activate generative_agents_jp
    ```
 
 2. **Format Validation**: For prompt translations, run format checker

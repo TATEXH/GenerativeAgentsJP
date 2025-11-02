@@ -3,7 +3,7 @@
 ## Environment Setup
 **CRITICAL**: Always activate conda environment before any Python operations:
 ```bash
-source /root/miniconda3/etc/profile.d/conda.sh && conda activate generative_agents_cn
+conda activate generative_agents_jp
 ```
 
 ## Core Simulation Commands
